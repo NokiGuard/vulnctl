@@ -1,0 +1,178 @@
+"""Core data models.
+
+Every data structure crossing a module boundary is a Pydantic v2 model in
+strict mode (no type coercion from Python values) and frozen (value objects).
+``Unavailable`` is a first-class value, not ``None``: it carries *why* a piece
+of enrichment data is missing and flows into the decision path so degraded
+verdicts are visibly degraded (FRAMEWORK.md §2).
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from enum import StrEnum
+
+from pydantic import BaseModel, ConfigDict, Field
+
+_MODEL_CONFIG = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+
+class IngestSource(StrEnum):
+    """How a finding entered the pipeline (SPEC.md §4.1, v0.1 inputs)."""
+
+    CLI = "cli"
+    CYCLONEDX = "cyclonedx"
+    GRYPE = "grype"
+
+
+class UnavailableReason(StrEnum):
+    """Why an enrichment field could not be populated."""
+
+    SOURCE_DOWN = "source_down"
+    OFFLINE = "offline"
+    NOT_FOUND = "not_found"
+    RATE_LIMITED = "rate_limited"
+
+
+class Unavailable(BaseModel):
+    """Marker value for enrichment data that could not be fetched."""
+
+    model_config = _MODEL_CONFIG
+
+    reason: UnavailableReason
+    detail: str | None = None
+
+
+class PackageRef(BaseModel):
+    """A package identified by purl, present on SBOM/scanner ingest paths."""
+
+    model_config = _MODEL_CONFIG
+
+    purl: str
+    version: str | None = None
+
+
+class Finding(BaseModel):
+    """Normalized unit of work produced by the ingest layer."""
+
+    model_config = _MODEL_CONFIG
+
+    cve_id: str
+    source: IngestSource
+    package: PackageRef | None = None
+    asset_hint: str | None = None
+
+
+class EpssData(BaseModel):
+    """FIRST EPSS exploitation-probability data for one CVE."""
+
+    model_config = _MODEL_CONFIG
+
+    score: float = Field(ge=0.0, le=1.0)
+    percentile: float = Field(ge=0.0, le=1.0)
+    date: date
+
+
+class KevData(BaseModel):
+    """CISA Known Exploited Vulnerabilities catalog membership."""
+
+    model_config = _MODEL_CONFIG
+
+    listed: bool
+    date_added: date | None = None
+    ransomware: bool = False
+
+
+class CvssData(BaseModel):
+    """CVSS scoring data (NVD)."""
+
+    model_config = _MODEL_CONFIG
+
+    vector: str
+    base_score: float = Field(ge=0.0, le=10.0)
+    severity: str
+
+
+class VersionData(BaseModel):
+    """Affected / fixed version ranges (OSV/GHSA)."""
+
+    model_config = _MODEL_CONFIG
+
+    affected: list[str] = []
+    fixed: list[str] = []
+
+
+class ExploitData(BaseModel):
+    """Public exploit presence indicators."""
+
+    model_config = _MODEL_CONFIG
+
+    edb_ids: list[str] = []
+    msf_modules: list[str] = []
+    nuclei_templates: list[str] = []
+
+
+class SourceMeta(BaseModel):
+    """Provenance for one source's contribution to an enrichment."""
+
+    model_config = _MODEL_CONFIG
+
+    source: str
+    fetched_at: datetime
+    cache_hit: bool
+
+
+class Enrichment(BaseModel):
+    """Fused intelligence for one finding, produced by the pipeline.
+
+    Each source-backed field is either its data model or ``Unavailable`` —
+    a source outage degrades the field, never the run (SPEC.md FR-8).
+    """
+
+    model_config = _MODEL_CONFIG
+
+    epss: EpssData | Unavailable
+    kev: KevData | Unavailable
+    cvss: CvssData | Unavailable
+    cwes: list[str] = []
+    versions: VersionData | Unavailable
+    exploits: ExploitData | Unavailable
+    provenance: dict[str, SourceMeta] = {}
+
+
+class Decision(StrEnum):
+    """SSVC outcome, in ascending priority order."""
+
+    TRACK = "track"
+    TRACK_STAR = "track*"
+    ATTEND = "attend"
+    ACT = "act"
+
+
+class DecisionPathStep(BaseModel):
+    """One tree-node visit: which input was read, its value, and its origin."""
+
+    model_config = _MODEL_CONFIG
+
+    node: str
+    value: str
+    value_source: str
+
+
+class DecisionPath(BaseModel):
+    """Ordered record of every node visited en route to a decision."""
+
+    model_config = _MODEL_CONFIG
+
+    steps: list[DecisionPathStep] = []
+
+
+class Verdict(BaseModel):
+    """SSVC engine output: the decision plus the audit trail behind it."""
+
+    model_config = _MODEL_CONFIG
+
+    decision: Decision
+    path: DecisionPath
+    tree_id: str
+    inputs_degraded: bool
