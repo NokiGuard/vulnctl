@@ -4,7 +4,18 @@
 
 `vulnctl` is a CLI-first vulnerability prioritization engine that turns raw findings into **auditable remediation decisions**. Input a CVE list, SBOM, or scanner report; output a ranked set of Track / Track\* / Attend / Act verdicts, each with the complete decision path and the intelligence that drove it. Designed for vulnerability management practitioners who must defend prioritization decisions to engineering and leadership.
 
-> **Status:** pre-alpha (M1 skeleton). No enrichment sources or decision engine yet — see [ROADMAP.md](ROADMAP.md).
+> **Status:** pre-alpha (M2 enrich core). EPSS, CISA KEV, and NVD enrichment with a rich-table view; the SSVC decision engine arrives in M3 — see [ROADMAP.md](ROADMAP.md).
+
+## Usage
+
+```bash
+vulnctl enrich CVE-2021-44228 CVE-2023-4863   # fused intel table (EPSS, KEV, CVSS)
+vulnctl enrich --offline CVE-2021-44228       # cached data + bundled snapshots only
+vulnctl cache stats                            # cache location and entry counts
+vulnctl cache purge --source epss              # drop one source's cached entries
+```
+
+An NVD API key (optional, higher rate limits) is read from the `VULNCTL_NVD_API_KEY` environment variable only.
 
 ## Install
 

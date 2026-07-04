@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import asyncio
 from importlib.metadata import version as _pkg_version
 from typing import Annotated
 
@@ -11,6 +11,9 @@ from rich.console import Console
 from rich.table import Table
 
 from vulnctl.cache import Cache
+from vulnctl.ingest.cve_list import parse_cve_ids
+from vulnctl.output.table import build_table
+from vulnctl.pipeline import enrich_findings
 
 app = typer.Typer(
     name="vulnctl",
@@ -21,8 +24,6 @@ cache_app = typer.Typer(help="Inspect and manage the local response cache.", no_
 app.add_typer(cache_app, name="cache")
 
 console = Console()
-
-_CVE_ID_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
 
 
 def _version_callback(value: bool) -> None:
@@ -46,29 +47,28 @@ def main(
     """Not another score. A defensible decision."""
 
 
-def _validate_cve_id(value: str) -> str:
-    if not _CVE_ID_RE.fullmatch(value):
-        raise typer.BadParameter(f"{value!r} is not a CVE ID (expected CVE-YYYY-NNNN...)")
-    return value.upper()
-
-
 @app.command()
 def enrich(
     cve_ids: Annotated[
         list[str],
-        typer.Argument(
-            metavar="CVE_ID...",
-            callback=lambda ids: [_validate_cve_id(i) for i in ids],
-            help="One or more CVE IDs, e.g. CVE-2021-44228.",
-        ),
+        typer.Argument(metavar="CVE_ID...", help="One or more CVE IDs, e.g. CVE-2021-44228."),
     ],
+    offline: Annotated[
+        bool,
+        typer.Option(
+            "--offline",
+            help="Use only cached data and bundled snapshots; never touch the network.",
+        ),
+    ] = False,
 ) -> None:
-    """Enrich CVE IDs with threat intelligence and rank them (not yet implemented)."""
-    console.print(
-        f"[yellow]Enrichment is not yet implemented[/yellow] — "
-        f"parsed {len(cve_ids)} CVE ID(s): {', '.join(cve_ids)}.\n"
-        "Source adapters arrive in milestone M2 (see ROADMAP.md)."
-    )
+    """Enrich CVE IDs with EPSS, CISA KEV, and NVD intelligence."""
+    try:
+        findings = parse_cve_ids(cve_ids)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    with Cache() as cache:
+        results, metadata = asyncio.run(enrich_findings(findings, cache=cache, offline=offline))
+    console.print(build_table(results, metadata))
 
 
 @cache_app.command()

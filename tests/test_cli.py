@@ -31,12 +31,16 @@ def test_no_args_shows_help() -> None:
     assert "Usage" in result.output
 
 
-def test_enrich_valid_cve_prints_stub_notice() -> None:
-    result = runner.invoke(app, ["enrich", "CVE-2021-44228", "cve-2023-4863"])
+def test_enrich_offline_renders_table_from_snapshots() -> None:
+    """End-to-end offline run: bundled snapshots only, zero network."""
+    result = runner.invoke(app, ["enrich", "--offline", "cve-2021-44228", "CVE-2019-0708"])
     assert result.exit_code == 0
-    assert "not yet implemented" in result.output
-    # IDs are normalized to uppercase.
-    assert "CVE-2023-4863" in result.output
+    # IDs normalized to uppercase; both CVEs are in the bundled snapshots.
+    assert "CVE-2021-44228" in result.output
+    assert "CVE-2019-0708" in result.output
+    assert "ransomware" in result.output  # both are KEV ransomware entries
+    assert "n/a (offline)" in result.output  # NVD has no snapshot -> visibly degraded
+    assert "offline mode" in result.output
 
 
 def test_enrich_invalid_cve_rejected() -> None:
