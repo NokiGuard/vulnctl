@@ -93,6 +93,19 @@ class CvssData(BaseModel):
     severity: str
 
 
+class NvdData(BaseModel):
+    """Combined NVD answer for one CVE: CVSS scoring plus CWE classification.
+
+    The NVD adapter is the single source for both ``Enrichment.cvss`` and
+    ``Enrichment.cwes``; the pipeline unpacks this into those two fields.
+    """
+
+    model_config = _MODEL_CONFIG
+
+    cvss: CvssData | Unavailable
+    cwes: list[str] = []
+
+
 class VersionData(BaseModel):
     """Affected / fixed version ranges (OSV/GHSA)."""
 
@@ -138,6 +151,29 @@ class Enrichment(BaseModel):
     versions: VersionData | Unavailable
     exploits: ExploitData | Unavailable
     provenance: dict[str, SourceMeta] = {}
+
+
+class EnrichedFinding(BaseModel):
+    """A finding paired with its enrichment — what the output layer consumes.
+
+    Extended to ``RankedResult`` (adding a ``Verdict``) in M3.
+    """
+
+    model_config = _MODEL_CONFIG
+
+    finding: Finding
+    enrichment: Enrichment
+
+
+class RunMetadata(BaseModel):
+    """Run-level facts the pipeline emits alongside results (FRAMEWORK.md §3.3)."""
+
+    model_config = _MODEL_CONFIG
+
+    sources: list[str]
+    offline: bool
+    cache_hit_rate: dict[str, float]
+    degradations: list[str] = []
 
 
 class Decision(StrEnum):

@@ -52,6 +52,16 @@ def test_ttl_enforced_at_read(cache: Cache) -> None:
     assert cache.get("epss", "CVE-2021-44228", timedelta(days=7)) == "payload"
 
 
+def test_get_entry_exposes_fetch_time(cache: Cache) -> None:
+    before = datetime.now(UTC)
+    cache.set("epss", "CVE-2021-44228", "payload")
+    entry = cache.get_entry("epss", "CVE-2021-44228", TTL)
+    assert entry is not None
+    assert entry.payload == "payload"
+    assert before <= entry.fetched_at <= datetime.now(UTC)
+    assert cache.get_entry("epss", "CVE-0000-0000", TTL) is None
+
+
 def test_purge_single_source(cache: Cache) -> None:
     cache.set("epss", "CVE-1", "a")
     cache.set("epss", "CVE-2", "b")

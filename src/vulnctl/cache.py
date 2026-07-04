@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS cache (
 """
 
 
+class CacheEntry(BaseModel):
+    """A fresh cache row: the payload plus when it was originally fetched."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    payload: str
+    fetched_at: datetime
+
+
 class CacheStats(BaseModel):
     """Snapshot of cache contents for ``vulnctl cache stats``."""
 
@@ -57,6 +66,14 @@ class Cache:
 
     def get(self, source: str, key: str, ttl: timedelta) -> str | None:
         """Return the cached payload, or None if absent or older than ``ttl``."""
+        entry = self.get_entry(source, key, ttl)
+        return entry.payload if entry is not None else None
+
+    def get_entry(self, source: str, key: str, ttl: timedelta) -> CacheEntry | None:
+        """Like :meth:`get`, but also returns the row's original fetch time.
+
+        Adapters use ``fetched_at`` to build provenance (``SourceMeta``).
+        """
         row = self._conn.execute(
             "SELECT fetched_at, payload FROM cache WHERE source = ? AND key = ?",
             (source, key),
@@ -66,7 +83,7 @@ class Cache:
         fetched_at = datetime.fromisoformat(row[0])
         if datetime.now(UTC) - fetched_at > ttl:
             return None
-        return str(row[1])
+        return CacheEntry(payload=str(row[1]), fetched_at=fetched_at)
 
     def set(self, source: str, key: str, payload: str) -> None:
         """Insert or refresh a payload, stamping it with the current UTC time."""
