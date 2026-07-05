@@ -1,50 +1,81 @@
-"""Table formatter tests: rendering, sorting, and visible degradation."""
+"""Table formatter tests: rendering, three-key sorting, visible degradation, paths."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from rich.console import Console
+from rich.console import Console, RenderableType
 
 from vulnctl.models import (
-    EnrichedFinding,
+    CvssData,
+    Decision,
+    DecisionPath,
+    DecisionPathStep,
     Enrichment,
     EpssData,
     Finding,
     IngestSource,
     KevData,
+    RankedResult,
     RunMetadata,
     SourceMeta,
     Unavailable,
     UnavailableReason,
+    Verdict,
 )
-from vulnctl.output.table import build_table
+from vulnctl.output.table import build_paths, build_table
 
 _META = SourceMeta(source="test", fetched_at=datetime(2026, 7, 4, tzinfo=UTC), cache_hit=False)
 _DOWN = Unavailable(reason=UnavailableReason.SOURCE_DOWN)
 _NOT_IMPL = Unavailable(reason=UnavailableReason.NOT_FOUND, detail="no adapter yet")
+_STEPS = [
+    DecisionPathStep(node="exploitation", value="active", value_source="kev"),
+    DecisionPathStep(node="automatable", value="yes", value_source="default"),
+]
 
 
 def _result(
-    cve_id: str, *, epss: EpssData | Unavailable, kev: KevData | Unavailable
-) -> EnrichedFinding:
-    return EnrichedFinding(
+    cve_id: str,
+    *,
+    decision: Decision,
+    epss: EpssData | Unavailable = _DOWN,
+    kev: KevData | Unavailable = _DOWN,
+    cvss: CvssData | Unavailable = _DOWN,
+    degraded: bool = False,
+) -> RankedResult:
+    return RankedResult(
         finding=Finding(cve_id=cve_id, source=IngestSource.CLI),
         enrichment=Enrichment(
             epss=epss,
             kev=kev,
-            cvss=_DOWN,
+            cvss=cvss,
             versions=_NOT_IMPL,
             exploits=_NOT_IMPL,
             provenance={"test": _META},
         ),
+        verdict=Verdict(
+            decision=decision,
+            path=DecisionPath(steps=_STEPS),
+            tree_id="toy-v1",
+            inputs_degraded=degraded,
+        ),
     )
 
 
-def _render(results: list[EnrichedFinding], metadata: RunMetadata) -> str:
-    console = Console(width=160, force_terminal=False, legacy_windows=False)
+def _epss(score: float) -> EpssData:
+    return EpssData(score=score, percentile=score, date=date(2026, 7, 4))
+
+
+def _cvss(base: float) -> CvssData:
+    return CvssData(
+        vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H", base_score=base, severity="HIGH"
+    )
+
+
+def _render(renderable: RenderableType) -> str:
+    console = Console(width=180, force_terminal=False, legacy_windows=False)
     with console.capture() as capture:
-        console.print(build_table(results, metadata))
+        console.print(renderable)
     return capture.get()
 
 
@@ -56,48 +87,77 @@ _METADATA = RunMetadata(
 )
 
 
-def test_rows_sorted_by_epss_desc_with_unavailable_last() -> None:
-    low = _result(
-        "CVE-2020-1111",
-        epss=EpssData(score=0.1, percentile=0.4, date=date(2026, 7, 4)),
-        kev=KevData(listed=False),
-    )
-    high = _result(
-        "CVE-2020-2222",
-        epss=EpssData(score=0.9, percentile=0.99, date=date(2026, 7, 4)),
-        kev=KevData(listed=False),
-    )
-    degraded = _result("CVE-2020-3333", epss=_DOWN, kev=KevData(listed=False))
+def test_sort_is_decision_then_epss_then_cvss() -> None:
+    rows = [
+        _result("CVE-2020-1111", decision=Decision.TRACK, epss=_epss(0.99)),
+        _result("CVE-2020-2222", decision=Decision.ACT, epss=_epss(0.10)),
+        _result("CVE-2020-3333", decision=Decision.ATTEND, epss=_epss(0.50)),
+        _result("CVE-2020-4444", decision=Decision.ATTEND, epss=_epss(0.70)),
+        _result("CVE-2020-5555", decision=Decision.ATTEND, epss=_epss(0.70), cvss=_cvss(9.8)),
+        _result("CVE-2020-6666", decision=Decision.TRACK_STAR, epss=_DOWN),
+    ]
+    text = _render(build_table(rows, _METADATA))
+    order = [
+        text.index("CVE-2020-2222"),  # act
+        text.index("CVE-2020-5555"),  # attend, epss .70, cvss 9.8
+        text.index("CVE-2020-4444"),  # attend, epss .70, no cvss
+        text.index("CVE-2020-3333"),  # attend, epss .50
+        text.index("CVE-2020-6666"),  # track*, epss unavailable
+        text.index("CVE-2020-1111"),  # track, even with epss .99
+    ]
+    assert order == sorted(order)
 
-    text = _render([low, degraded, high], _METADATA)
-    assert text.index("CVE-2020-2222") < text.index("CVE-2020-1111") < text.index("CVE-2020-3333")
+
+def test_decision_labels_rendered() -> None:
+    rows = [
+        _result("CVE-2020-1111", decision=Decision.ACT),
+        _result("CVE-2020-2222", decision=Decision.TRACK_STAR),
+    ]
+    text = _render(build_table(rows, _METADATA))
+    assert "ACT" in text
+    assert "TRACK*" in text
 
 
 def test_unavailable_renders_reason_not_blank() -> None:
-    degraded = _result("CVE-2020-3333", epss=_DOWN, kev=_DOWN)
-    text = _render([degraded], _METADATA)
+    text = _render(build_table([_result("CVE-2020-3333", decision=Decision.TRACK)], _METADATA))
     assert text.count("n/a (source down)") >= 2
 
 
 def test_kev_cell_shows_date_and_ransomware() -> None:
     listed = _result(
         "CVE-2021-44228",
-        epss=EpssData(score=0.99, percentile=1.0, date=date(2026, 7, 4)),
+        decision=Decision.ACT,
+        epss=_epss(0.99),
         kev=KevData(listed=True, date_added=date(2021, 12, 10), ransomware=True),
     )
-    text = _render([listed], _METADATA)
+    text = _render(build_table([listed], _METADATA))
     assert "yes 2021-12-10 ransomware" in text
-    assert "0.990 (p100.0)" in text
+    assert "0.990 (p99.0)" in text
 
 
 def test_caption_summarizes_run_metadata() -> None:
-    row = _result("CVE-2020-1111", epss=_DOWN, kev=KevData(listed=False))
-    # The caption wraps to the table width; collapse whitespace before asserting.
-    text = " ".join(_render([row], _METADATA).split())
+    row = _result("CVE-2020-1111", decision=Decision.TRACK)
+    text = " ".join(_render(build_table([row], _METADATA)).split())
     assert "sources: epss, kev, nvd" in text
     assert "epss 100%" in text
     assert "1 degraded field(s)" in text
     assert "offline" not in text
 
     offline_meta = _METADATA.model_copy(update={"offline": True})
-    assert "offline mode" in " ".join(_render([row], offline_meta).split())
+    assert "offline mode" in " ".join(_render(build_table([row], offline_meta)).split())
+
+
+def test_paths_render_every_step_with_sources() -> None:
+    rows = [
+        _result("CVE-2020-2222", decision=Decision.ACT, degraded=True),
+        _result("CVE-2020-1111", decision=Decision.TRACK),
+    ]
+    text = _render(build_paths(rows))
+    # Table order: ACT first.
+    assert text.index("CVE-2020-2222") < text.index("CVE-2020-1111")
+    assert "1. exploitation = active" in text
+    assert "[kev]" in text
+    assert "2. automatable  = yes" in text  # node names aligned
+    assert "[default]" in text
+    assert "[degraded: defaults applied]" in text
+    assert "(tree toy-v1)" in text

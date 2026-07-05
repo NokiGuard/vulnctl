@@ -177,12 +177,18 @@ class RunMetadata(BaseModel):
 
 
 class Decision(StrEnum):
-    """SSVC outcome, in ascending priority order."""
+    """SSVC outcome, in ascending priority order. Compare via :attr:`rank`."""
 
     TRACK = "track"
     TRACK_STAR = "track*"
     ATTEND = "attend"
     ACT = "act"
+
+    @property
+    def rank(self) -> int:
+        """Ascending priority: TRACK=0, TRACK_STAR=1, ATTEND=2, ACT=3."""
+        order = (Decision.TRACK, Decision.TRACK_STAR, Decision.ATTEND, Decision.ACT)
+        return order.index(self)
 
 
 class DecisionPathStep(BaseModel):
@@ -212,3 +218,13 @@ class Verdict(BaseModel):
     path: DecisionPath
     tree_id: str
     inputs_degraded: bool
+
+
+class RankedResult(BaseModel):
+    """Finding + Enrichment + Verdict — the unit every formatter consumes (§3.6)."""
+
+    model_config = _MODEL_CONFIG
+
+    finding: Finding
+    enrichment: Enrichment
+    verdict: Verdict

@@ -4,16 +4,20 @@
 
 `vulnctl` is a CLI-first vulnerability prioritization engine that turns raw findings into **auditable remediation decisions**. Input a CVE list, SBOM, or scanner report; output a ranked set of Track / Track\* / Attend / Act verdicts, each with the complete decision path and the intelligence that drove it. Designed for vulnerability management practitioners who must defend prioritization decisions to engineering and leadership.
 
-> **Status:** pre-alpha (M2 enrich core). EPSS, CISA KEV, and NVD enrichment with a rich-table view; the SSVC decision engine arrives in M3 — see [ROADMAP.md](ROADMAP.md).
+> **Status:** pre-alpha (M3 decisions). EPSS/KEV/NVD enrichment plus SSVC verdicts (Track / Track\* / Attend / Act) with full decision paths; SBOM and scanner ingestion arrive in M4 — see [ROADMAP.md](ROADMAP.md).
 
 ## Usage
 
 ```bash
-vulnctl enrich CVE-2021-44228 CVE-2023-4863   # fused intel table (EPSS, KEV, CVSS)
-vulnctl enrich --offline CVE-2021-44228       # cached data + bundled snapshots only
-vulnctl cache stats                            # cache location and entry counts
-vulnctl cache purge --source epss              # drop one source's cached entries
+vulnctl enrich CVE-2021-44228 CVE-2023-4863    # ranked verdicts + fused intel table
+vulnctl enrich CVE-2021-44228 \
+    --context examples/context.yaml --show-path  # verdict with its full decision path
+vulnctl enrich --offline CVE-2021-44228        # cached data + bundled snapshots only
+vulnctl cache stats                             # cache location and entry counts
+vulnctl cache purge --source epss               # drop one source's cached entries
 ```
+
+Verdicts come from a declarative SSVC decision tree (bundled: `cisa-deployer-v1`, the CERT/CC deployer tree with CISA's Track/Track\*/Attend/Act labels; bring your own with `--tree`). Organizational inputs — exposure, mission impact, overrides — come from a [context file](examples/context.yaml). Every verdict records the full path that produced it, including which source supplied each input and any defaults applied for unavailable data.
 
 An NVD API key (optional, higher rate limits) is read from the `VULNCTL_NVD_API_KEY` environment variable only.
 

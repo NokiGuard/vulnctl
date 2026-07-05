@@ -16,8 +16,9 @@ runner = CliRunner()
 
 @pytest.fixture(autouse=True)
 def isolated_cache_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Point XDG_CACHE_HOME at tmp_path so no test touches the real cache."""
+    """Isolate the cache under tmp_path and widen the terminal so cells don't wrap."""
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("COLUMNS", "200")
 
 
 def test_version() -> None:
@@ -41,6 +42,48 @@ def test_enrich_offline_renders_table_from_snapshots() -> None:
     assert "ransomware" in result.output  # both are KEV ransomware entries
     assert "n/a (offline)" in result.output  # NVD has no snapshot -> visibly degraded
     assert "offline mode" in result.output
+    assert "ACT" in result.output  # KEV-listed + defaults on internet/high context
+
+
+def test_enrich_offline_with_context_and_show_path() -> None:
+    """DoD flow: verdict with complete decision path, defaults visibly sourced."""
+    result = runner.invoke(
+        app,
+        [
+            "enrich",
+            "--offline",
+            "--context",
+            str(Path(__file__).parent.parent / "examples" / "context.yaml"),
+            "--show-path",
+            "CVE-2021-44228",
+        ],
+    )
+    assert result.exit_code == 0
+    # KEV snapshot marks it active; NVD is offline so automatable falls to
+    # the tree default and must be visible as such in the path.
+    assert "exploitation = active" in result.output
+    assert "[kev]" in result.output
+    assert "automatable" in result.output
+    assert "[default]" in result.output
+    assert "[context]" in result.output
+    assert "degraded: defaults applied" in result.output
+    assert "cisa-deployer-v1" in result.output
+
+
+def test_enrich_bad_context_file_fails_loudly(tmp_path: Path) -> None:
+    bad = tmp_path / "context.yaml"
+    bad.write_text("exposrue: internet\n")
+    result = runner.invoke(app, ["enrich", "--offline", "--context", str(bad), "CVE-2021-44228"])
+    assert result.exit_code == 1
+    assert "error" in result.output
+
+
+def test_enrich_bad_tree_file_fails_loudly(tmp_path: Path) -> None:
+    bad = tmp_path / "tree.yaml"
+    bad.write_text("id: broken\n")
+    result = runner.invoke(app, ["enrich", "--offline", "--tree", str(bad), "CVE-2021-44228"])
+    assert result.exit_code == 1
+    assert "error" in result.output
 
 
 def test_enrich_invalid_cve_rejected() -> None:

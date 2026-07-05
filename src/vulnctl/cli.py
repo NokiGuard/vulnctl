@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from importlib.metadata import version as _pkg_version
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -11,9 +12,12 @@ from rich.console import Console
 from rich.table import Table
 
 from vulnctl.cache import Cache
+from vulnctl.context import ContextError, load_context
 from vulnctl.ingest.cve_list import parse_cve_ids
-from vulnctl.output.table import build_table
-from vulnctl.pipeline import enrich_findings
+from vulnctl.output.table import build_paths, build_table
+from vulnctl.pipeline import apply_tree, enrich_findings
+from vulnctl.ssvc.engine import EvaluationError
+from vulnctl.ssvc.tree import TreeError, load_bundled_tree, load_tree
 
 app = typer.Typer(
     name="vulnctl",
@@ -60,15 +64,36 @@ def enrich(
             help="Use only cached data and bundled snapshots; never touch the network.",
         ),
     ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Org context YAML (default: conservative defaults)."),
+    ] = None,
+    tree_path: Annotated[
+        Path | None,
+        typer.Option("--tree", help="Decision-tree YAML (default: bundled cisa-deployer-v1)."),
+    ] = None,
+    show_path: Annotated[
+        bool,
+        typer.Option("--show-path", help="Print each finding's full decision path."),
+    ] = False,
 ) -> None:
-    """Enrich CVE IDs with EPSS, CISA KEV, and NVD intelligence."""
+    """Enrich CVE IDs with threat intel and rank them with SSVC verdicts."""
     try:
         findings = parse_cve_ids(cve_ids)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
-    with Cache() as cache:
-        results, metadata = asyncio.run(enrich_findings(findings, cache=cache, offline=offline))
-    console.print(build_table(results, metadata))
+    try:
+        org_context = load_context(context_path)
+        tree = load_tree(tree_path) if tree_path is not None else load_bundled_tree()
+        with Cache() as cache:
+            results, metadata = asyncio.run(enrich_findings(findings, cache=cache, offline=offline))
+        ranked = apply_tree(results, org_context, tree)
+    except (ContextError, TreeError, EvaluationError) as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    console.print(build_table(ranked, metadata))
+    if show_path:
+        console.print(build_paths(ranked))
 
 
 @cache_app.command()

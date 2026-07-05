@@ -21,6 +21,7 @@ import vulnctl.adapters  # noqa: F401  (imports register every bundled adapter)
 from vulnctl import __version__
 from vulnctl.adapters.base import SourceAdapter, SourceResult, all_adapters
 from vulnctl.cache import Cache
+from vulnctl.context import OrgContext
 from vulnctl.models import (
     CvssData,
     EnrichedFinding,
@@ -29,11 +30,14 @@ from vulnctl.models import (
     Finding,
     KevData,
     NvdData,
+    RankedResult,
     RunMetadata,
     SourceMeta,
     Unavailable,
     UnavailableReason,
 )
+from vulnctl.ssvc.engine import evaluate
+from vulnctl.ssvc.tree import DecisionTree
 
 _NO_ADAPTER = Unavailable(
     reason=UnavailableReason.NOT_FOUND, detail="no adapter for this source yet"
@@ -76,6 +80,20 @@ async def enrich_findings(
         for finding in findings
     ]
     return results, _run_metadata(by_source, cve_ids, offline=offline)
+
+
+def apply_tree(
+    results: list[EnrichedFinding], context: OrgContext, tree: DecisionTree
+) -> list[RankedResult]:
+    """Evaluate every enrichment against the tree — pure glue around the engine."""
+    return [
+        RankedResult(
+            finding=result.finding,
+            enrichment=result.enrichment,
+            verdict=evaluate(result.enrichment, context, tree),
+        )
+        for result in results
+    ]
 
 
 def _adapter_crashed(
