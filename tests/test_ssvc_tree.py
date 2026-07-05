@@ -281,6 +281,99 @@ def test_automatable_v2_or_unavailable_degrades() -> None:
 # --- from_raw direct ----------------------------------------------------------
 
 
+def _minimal_raw(**patches: object) -> dict[str, object]:
+    raw: dict[str, object] = {
+        "id": "min-v1",
+        "decision_points": {
+            "exploitation": {
+                "from": "derived",
+                "rule": "exploitation",
+                "values": ["none", "poc", "active"],
+            }
+        },
+        "tree": {"exploitation": {"none": "track", "poc": "attend", "active": "act"}},
+        "defaults": {"exploitation": "none"},
+    }
+    raw.update(patches)
+    return raw
+
+
+def test_minimal_raw_is_valid() -> None:
+    assert DecisionTree.from_raw(_minimal_raw()).id == "min-v1"
+
+
 def test_non_mapping_document_rejected() -> None:
     with pytest.raises(TreeError, match="must be a mapping"):
         DecisionTree.from_raw(["not", "a", "tree"])
+
+
+def test_norm_undoes_yaml_11_coercion() -> None:
+    from vulnctl.ssvc.tree import _norm
+
+    assert _norm(None) == "none"
+    assert _norm(True) == "yes"
+    assert _norm(False) == "no"
+    assert _norm("track") == "track"
+    assert _norm(3) == 3
+
+
+@pytest.mark.parametrize(
+    ("raw", "match"),
+    [
+        ({"id": "x"}, "missing required top-level"),
+        (_minimal_raw(id=5), "'id' must be a non-empty string"),
+        (_minimal_raw(decision_points=[]), "'decision_points' must be a non-empty mapping"),
+        (
+            _minimal_raw(decision_points={"exploitation": "derived"}),
+            "spec must be a mapping",
+        ),
+        (
+            _minimal_raw(
+                decision_points={
+                    "exploitation": {"from": "derived", "rule": "exploitation", "values": "few"}
+                }
+            ),
+            "decision point 'exploitation':",
+        ),
+        (
+            _minimal_raw(
+                decision_points={
+                    "exploitation": {
+                        "from": "derived",
+                        "rule": "exploitation",
+                        "values": ["none", "none", "active"],
+                    }
+                }
+            ),
+            "duplicate values",
+        ),
+        (_minimal_raw(tree=42), "node must be a mapping or a decision string"),
+        (
+            _minimal_raw(
+                tree={
+                    "exploitation": {"none": "track", "poc": "attend", "active": "act"},
+                    "extra": {},
+                }
+            ),
+            "exactly one decision point",
+        ),
+        (_minimal_raw(tree={"exploitation": 42}), "branches must be a mapping"),
+        (
+            _minimal_raw(
+                tree={
+                    "exploitation": {
+                        "none": "track",
+                        "poc": "attend",
+                        "active": "act",
+                        "wormable": "act",
+                    }
+                }
+            ),
+            "undeclared value",
+        ),
+        (_minimal_raw(defaults="none"), "'defaults' must be a mapping"),
+    ],
+)
+def test_structural_defects_fail_loudly(raw: dict[str, object], match: str) -> None:
+    with pytest.raises(TreeError, match=match):
+        DecisionTree.from_raw(raw)

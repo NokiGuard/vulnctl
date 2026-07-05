@@ -32,5 +32,5 @@ jobs:
       - name: Mypy
         run: uv run mypy src/
 
-      - name: Pytest
-        run: uv run pytest
+      - name: Pytest (with 100% branch-coverage gate on ssvc/)
+        run: uv run pytest --cov=vulnctl.ssvc --cov-branch --cov-report=term-missing --cov-fail-under=100

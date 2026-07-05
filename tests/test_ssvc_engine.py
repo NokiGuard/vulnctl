@@ -129,6 +129,54 @@ def test_determinism_across_input_grid() -> None:
     assert checked == 3 * 3 * 3 * 13
 
 
+def _hand_built_tree(point_spec: dict[str, object], defaults: dict[str, str]) -> DecisionTree:
+    """Bypass from_raw's cross-checks to reach the engine's defensive errors."""
+    from vulnctl.models import Decision
+    from vulnctl.ssvc.tree import DecisionPointSpec, TreeNode
+
+    spec = DecisionPointSpec.model_validate({"values": ["a", "b"], **point_spec})
+    return DecisionTree(
+        id="handmade-v1",
+        decision_points={"p": spec},
+        root=TreeNode(point="p", branches={"a": Decision.TRACK, "b": Decision.ACT}),
+        defaults=defaults,
+    )
+
+
+def test_context_point_without_key_is_hard_error() -> None:
+    tree = _hand_built_tree({"from": "context"}, defaults={})
+    with pytest.raises(EvaluationError, match="has no context key"):
+        evaluate(enrichment(), OrgContext(), tree)
+
+
+def test_context_value_outside_declared_values_is_hard_error() -> None:
+    tree = _hand_built_tree({"from": "context", "key": "exposure"}, defaults={})
+    with pytest.raises(EvaluationError, match="not a declared value"):
+        evaluate(enrichment(), OrgContext(), tree)  # exposure maps to "open", not in [a, b]
+
+
+def test_derived_point_without_rule_is_hard_error() -> None:
+    tree = _hand_built_tree({"from": "derived"}, defaults={"p": "a"})
+    with pytest.raises(EvaluationError, match="has no resolver rule"):
+        evaluate(enrichment(), OrgContext(), tree)
+
+
+def test_resolver_returning_undeclared_value_is_hard_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from vulnctl.ssvc import tree as tree_module
+
+    monkeypatch.setitem(tree_module.RESOLVERS, "exploitation", lambda e: ("sideways", "kev"))
+    with pytest.raises(EvaluationError, match="resolver 'exploitation' produced 'sideways'"):
+        evaluate(enrichment(), OrgContext(), TOY)
+
+
+def test_unavailable_input_without_default_is_hard_error() -> None:
+    tree = _hand_built_tree({"from": "derived", "rule": "exploitation"}, defaults={})
+    with pytest.raises(EvaluationError, match="unavailable and no default"):
+        evaluate(enrichment(), OrgContext(), tree)
+
+
 def test_degraded_only_when_default_used() -> None:
     # Fully resolvable: KEV answered no, exploits answered empty.
     verdict = evaluate(

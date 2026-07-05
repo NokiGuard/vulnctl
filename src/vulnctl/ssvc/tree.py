@@ -36,6 +36,7 @@ validation so hand-edited trees behave identically everywhere.
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib import resources
 from pathlib import Path
 from typing import Any, Literal
 
@@ -306,6 +307,16 @@ def _parse_defaults(raw: Any, points: dict[str, DecisionPointSpec]) -> dict[str,
                 "degraded enrichment falls back audibly instead of crashing mid-run"
             )
     return defaults
+
+
+BUNDLED_TREE = "cisa-deployer-v1"
+
+
+def load_bundled_tree(name: str = BUNDLED_TREE) -> DecisionTree:
+    """Load a tree shipped inside the wheel (``vulnctl/ssvc/trees/<name>.yaml``)."""
+    resource = resources.files("vulnctl.ssvc").joinpath("trees", f"{name}.yaml")
+    with resources.as_file(resource) as path:
+        return load_tree(path)
 
 
 def load_tree(path: Path) -> DecisionTree:

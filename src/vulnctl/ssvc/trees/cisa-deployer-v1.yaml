@@ -1,0 +1,164 @@
+# CISA-style SSVC deployer tree (vulnctl bundled default).
+#
+# Structure and outcome table transcribed from the CERT/CC SSVC deployer
+# decision model (https://certcc.github.io/SSVC/howto/deployer_tree/,
+# fetched 2026-07-04): Exploitation v1.1.0 x System Exposure v1.0.1 x
+# Automatable v2.0.0 x Human Impact v2.0.2 -> 72 leaves.
+# CERT/CC outcome names are renamed positionally to CISA's labels:
+#   defer -> track, scheduled -> track*, out-of-cycle -> attend, immediate -> act
+# Structure, renaming, and defaults confirmed by the maintainer on 2026-07-04.
+id: cisa-deployer-v1
+decision_points:
+  exploitation:
+    from: derived
+    rule: exploitation
+    values: ["none", "poc", "active"]
+  exposure:
+    from: context
+    key: exposure
+    values: ["small", "controlled", "open"]
+  automatable:
+    from: derived
+    rule: automatable
+    values: ["no", "yes"]
+  human_impact:
+    from: context
+    key: mission_impact
+    values: ["low", "medium", "high", "very_high"]
+tree:
+  exploitation:
+    "none":
+      exposure:
+        "small":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track"
+                "medium": "track"
+                "high": "track*"
+                "very_high": "track*"
+            "yes":
+              human_impact:
+                "low": "track"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "track*"
+        "controlled":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "track*"
+            "yes":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "track*"
+        "open":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "track*"
+            "yes":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "attend"
+    "poc":
+      exposure:
+        "small":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "track*"
+            "yes":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "track*"
+        "controlled":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "track*"
+            "yes":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "attend"
+        "open":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "track*"
+                "very_high": "attend"
+            "yes":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "attend"
+                "very_high": "attend"
+    "active":
+      exposure:
+        "small":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "attend"
+                "very_high": "attend"
+            "yes":
+              human_impact:
+                "low": "track*"
+                "medium": "attend"
+                "high": "attend"
+                "very_high": "attend"
+        "controlled":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track*"
+                "medium": "track*"
+                "high": "attend"
+                "very_high": "attend"
+            "yes":
+              human_impact:
+                "low": "attend"
+                "medium": "attend"
+                "high": "attend"
+                "very_high": "attend"
+        "open":
+          automatable:
+            "no":
+              human_impact:
+                "low": "track*"
+                "medium": "attend"
+                "high": "attend"
+                "very_high": "act"
+            "yes":
+              human_impact:
+                "low": "attend"
+                "medium": "attend"
+                "high": "act"
+                "very_high": "act"
+defaults:
+  exploitation: "none"
+  automatable: "yes"
