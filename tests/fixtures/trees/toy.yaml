@@ -1,0 +1,26 @@
+# Minimal valid tree used by loader and engine tests. Not a real SSVC tree.
+id: toy-v1
+decision_points:
+  exploitation:
+    from: derived
+    rule: exploitation
+    values: [none, poc, active]
+  exposure:
+    from: context
+    key: exposure
+    values: [small, controlled, open]
+tree:
+  exploitation:
+    none: track
+    poc:
+      exposure:
+        small: track
+        controlled: track*
+        open: attend
+    active:
+      exposure:
+        small: track*
+        controlled: attend
+        open: act
+defaults:
+  exploitation: none
