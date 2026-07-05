@@ -1,0 +1,33 @@
+# Organizational risk context for vulnctl — feeds the SSVC decision points
+# that intelligence sources cannot know (`vulnctl enrich --context <file>`).
+#
+# Every field is optional. Omitted fields use conservative defaults:
+# exposure: internet, mission_impact: high, asset_tier: standard.
+# Unknown keys are hard errors, so typos are caught instead of silently
+# reverting a setting to its default.
+
+# Network position of the estate these findings run on. Maps to the SSVC
+# "System Exposure" decision point.
+#   internet — reachable from the public internet (SSVC: open)
+#   internal — reachable only behind access controls/VPN (SSVC: controlled)
+#   isolated — air-gapped or highly restricted segment (SSVC: small)
+exposure: internet
+
+# Impact on your mission if a finding here is exploited. Maps to the SSVC
+# "Human Impact" decision point. SSVC reserves very_high for outcomes like
+# danger to life or outright mission failure — most estates are low..high.
+#   one of: low | medium | high | very_high
+mission_impact: high
+
+# Asset criticality tier: crown_jewel | important | standard.
+# Not read by the bundled v1 tree; groundwork for the v0.2 per-asset registry.
+asset_tier: standard
+
+# Force a decision-point value when you know better than the derived signal
+# (e.g. your scanner proves exploitation, or you know exploitation cannot be
+# automated in your environment). Keys are decision-point names from the
+# tree; null means "no override". Forced values show up in the decision path
+# as value_source="override" and never count as degraded input.
+overrides:
+  automatable: null
+  # exploitation: active

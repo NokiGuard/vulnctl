@@ -16,10 +16,18 @@ higher severity — but not maximal:
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 
 _EXPOSURE_TO_TREE = {"internet": "open", "internal": "controlled", "isolated": "small"}
+
+
+class ContextError(Exception):
+    """A context file failed validation; the message says exactly what to fix."""
 
 
 class Exposure(StrEnum):
@@ -72,3 +80,51 @@ class OrgContext(BaseModel):
         if key == "mission_impact":
             return self.mission_impact.value
         raise KeyError(key)
+
+
+def load_context(path: Path | None) -> OrgContext:
+    """Load and validate ``context.yaml``; documented defaults when ``path`` is None.
+
+    Unknown keys are hard errors — they are almost always typos, and a typoed
+    key silently reverting to a default would change verdicts (FRAMEWORK.md
+    §3.5). Override entries set to null are treated as "no override" and
+    dropped; bare YAML booleans in override values are normalized back to the
+    ``yes``/``no`` strings the trees use.
+    """
+    if path is None:
+        return OrgContext()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ContextError(f"cannot read context file {path}: {exc}") from exc
+    try:
+        raw = YAML(typ="safe").load(text)
+    except YAMLError as exc:
+        raise ContextError(f"context file {path} is not valid YAML: {exc}") from exc
+    if raw is None:
+        return OrgContext()
+    if not isinstance(raw, dict):
+        raise ContextError(f"context file {path} must be a mapping of settings")
+
+    overrides = raw.get("overrides")
+    if isinstance(overrides, dict):
+        raw = dict(raw)
+        raw["overrides"] = {
+            str(point): _norm_override(value)
+            for point, value in overrides.items()
+            if value is not None
+        }
+    try:
+        # strict=False: YAML scalars arrive as plain strings and must coerce
+        # into the enum fields; extra="forbid" still rejects unknown keys.
+        return OrgContext.model_validate(raw, strict=False)
+    except ValidationError as exc:
+        raise ContextError(f"context file {path} is invalid: {exc}") from exc
+
+
+def _norm_override(value: Any) -> Any:
+    if value is True:
+        return "yes"
+    if value is False:
+        return "no"
+    return value
