@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
-from vulnctl.adapters.base import SourceAdapter, SourceResult, register
+from vulnctl.adapters.base import SourceAdapter, SourceResult, body_too_large, register
 from vulnctl.models import EpssData, SourceMeta, Unavailable, UnavailableReason
 
 API_URL = "https://api.first.org/data/v1/epss"
@@ -71,12 +71,9 @@ class EpssAdapter(SourceAdapter):
         results: dict[str, SourceResult] = {}
         misses: list[str] = []
         for cve_id in cve_ids:
-            entry = self._cache.get_entry(self.name, cve_id, self._cache_ttl())
-            if entry is not None:
-                results[cve_id] = SourceResult(
-                    data=EpssData.model_validate_json(entry.payload),
-                    meta=self._meta(entry.fetched_at, cache_hit=True),
-                )
+            cached = self._cached_result(cve_id)
+            if cached is not None:
+                results[cve_id] = cached
             else:
                 misses.append(cve_id)
 
@@ -87,6 +84,16 @@ class EpssAdapter(SourceAdapter):
                 batch = misses[start : start + _BATCH_SIZE]
                 results.update(await self._fetch_batch(batch))
         return results
+
+    def _cached_result(self, cve_id: str) -> SourceResult | None:
+        entry = self._cache.get_entry(self.name, cve_id, self._cache_ttl())
+        if entry is None:
+            return None
+        try:
+            data = EpssData.model_validate_json(entry.payload)
+        except ValidationError:
+            return None  # cache row written by an incompatible version: refetch
+        return SourceResult(data=data, meta=self._meta(entry.fetched_at, cache_hit=True))
 
     def _from_snapshot(self, cve_ids: list[str]) -> dict[str, SourceResult]:
         snapshot = _load_snapshot()
@@ -111,6 +118,11 @@ class EpssAdapter(SourceAdapter):
                 API_URL, params={"cve": ",".join(batch), "limit": str(len(batch))}
             )
             response.raise_for_status()
+            if body_too_large(response):
+                failure = self._unavailable(
+                    UnavailableReason.SOURCE_DOWN, "response exceeds size limit"
+                )
+                return dict.fromkeys(batch, failure)
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             failure = self._unavailable(UnavailableReason.SOURCE_DOWN, str(exc))

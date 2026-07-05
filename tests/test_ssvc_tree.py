@@ -223,6 +223,14 @@ def test_invalid_yaml_and_missing_file_are_tree_errors(tmp_path: Path) -> None:
         load_tree(tmp_path / "absent.yaml")
 
 
+def test_oversized_tree_file_rejected_before_parsing(tmp_path: Path) -> None:
+    from vulnctl.ssvc.tree import MAX_TREE_FILE_BYTES
+
+    path = _write(tmp_path, "#" + "x" * MAX_TREE_FILE_BYTES)
+    with pytest.raises(TreeError, match="limit is"):
+        load_tree(path)
+
+
 def test_bare_decision_document_rejected(tmp_path: Path) -> None:
     path = _write(
         tmp_path,

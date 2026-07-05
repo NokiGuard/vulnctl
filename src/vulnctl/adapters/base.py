@@ -26,6 +26,17 @@ T = TypeVar("T")
 #: Passed as TTL when running --offline: any cached row beats no data at all.
 OFFLINE_TTL = timedelta(days=36500)
 
+#: Refuse to parse response bodies larger than this — a compromised or
+#: misbehaving feed must not be able to exhaust memory during JSON parsing.
+#: (Largest legitimate body today is the ~3 MiB KEV catalog.)
+MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+
+
+def body_too_large(response: httpx.Response) -> bool:
+    """True if the response body exceeds :data:`MAX_RESPONSE_BYTES`."""
+    return len(response.content) > MAX_RESPONSE_BYTES
+
+
 AdapterData = EpssData | KevData | NvdData
 
 

@@ -219,9 +219,8 @@ def _parse_points(raw: Any) -> dict[str, DecisionPointSpec]:
                     f"decision point {name!r}: unknown rule {spec.rule!r} "
                     f"(known: {', '.join(sorted(RESOLVERS))})"
                 )
-        else:
-            if spec.key is None or spec.rule is not None:
-                raise TreeError(f"decision point {name!r}: from=context requires 'key' only")
+        elif spec.key is None or spec.rule is not None:
+            raise TreeError(f"decision point {name!r}: from=context requires 'key' only")
         points[name] = spec
     return points
 
@@ -319,9 +318,19 @@ def load_bundled_tree(name: str = BUNDLED_TREE) -> DecisionTree:
         return load_tree(path)
 
 
+#: Trees are a few KiB; refuse absurd inputs before handing them to the YAML parser.
+MAX_TREE_FILE_BYTES = 1024 * 1024
+
+
 def load_tree(path: Path) -> DecisionTree:
     """Load and validate a tree YAML file; TreeError with an actionable message."""
     try:
+        size = path.stat().st_size
+        if size > MAX_TREE_FILE_BYTES:
+            raise TreeError(
+                f"tree file {path} is {size} bytes; limit is {MAX_TREE_FILE_BYTES} "
+                "(trees are a few KiB — this is not a decision tree)"
+            )
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise TreeError(f"cannot read tree file {path}: {exc}") from exc

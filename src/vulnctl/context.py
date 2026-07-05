@@ -30,6 +30,10 @@ class ContextError(Exception):
     """A context file failed validation; the message says exactly what to fix."""
 
 
+#: Context files are a few lines; refuse absurd inputs before YAML parsing.
+MAX_CONTEXT_FILE_BYTES = 64 * 1024
+
+
 class Exposure(StrEnum):
     """Network position of the affected estate."""
 
@@ -94,6 +98,12 @@ def load_context(path: Path | None) -> OrgContext:
     if path is None:
         return OrgContext()
     try:
+        size = path.stat().st_size
+        if size > MAX_CONTEXT_FILE_BYTES:
+            raise ContextError(
+                f"context file {path} is {size} bytes; limit is "
+                f"{MAX_CONTEXT_FILE_BYTES} (context files are a few lines of YAML)"
+            )
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise ContextError(f"cannot read context file {path}: {exc}") from exc

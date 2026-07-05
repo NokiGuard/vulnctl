@@ -228,6 +228,37 @@ async def test_cache_hit_skips_network(
     assert second["CVE-2021-44228"].data == first["CVE-2021-44228"].data
 
 
+async def test_corrupt_cache_row_is_refetched_not_fatal(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    cache.set("nvd", "CVE-2021-44228", '{"schema": "from-an-old-version"}')
+    async with fixture_client(_fixture_router(load_fixture)) as client:
+        adapter = NvdAdapter(client, cache)
+        results = await adapter.fetch(["CVE-2021-44228"])
+
+    assert isinstance(results["CVE-2021-44228"].data, NvdData)
+    assert results["CVE-2021-44228"].meta.cache_hit is False  # treated as a miss
+
+
+async def test_oversized_response_degrades_to_source_down(
+    cache: Cache,
+    load_fixture: LoadFixture,
+    fixture_client: MakeClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from vulnctl.adapters import base
+
+    monkeypatch.setattr(base, "MAX_RESPONSE_BYTES", 16)
+    async with fixture_client(_fixture_router(load_fixture)) as client:
+        adapter = NvdAdapter(client, cache)
+        results = await adapter.fetch(["CVE-2021-44228"])
+
+    data = results["CVE-2021-44228"].data
+    assert isinstance(data, Unavailable)
+    assert data.reason is UnavailableReason.SOURCE_DOWN
+    assert data.detail == "response exceeds size limit"
+
+
 async def test_offline_answers_from_cache_only(
     cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
 ) -> None:

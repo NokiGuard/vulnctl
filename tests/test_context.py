@@ -88,6 +88,13 @@ def test_non_mapping_file_rejected(tmp_path: Path) -> None:
         load_context(_write(tmp_path, "- a\n- list\n"))
 
 
+def test_oversized_context_file_rejected_before_parsing(tmp_path: Path) -> None:
+    from vulnctl.context import MAX_CONTEXT_FILE_BYTES
+
+    with pytest.raises(ContextError, match="limit is"):
+        load_context(_write(tmp_path, "#" + "x" * MAX_CONTEXT_FILE_BYTES))
+
+
 def test_invalid_yaml_and_missing_file_are_context_errors(tmp_path: Path) -> None:
     with pytest.raises(ContextError, match="not valid YAML"):
         load_context(_write(tmp_path, "exposure: [unclosed"))

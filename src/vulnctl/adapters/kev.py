@@ -23,7 +23,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from vulnctl.adapters.base import SourceAdapter, SourceResult, register
+from vulnctl.adapters.base import SourceAdapter, SourceResult, body_too_large, register
 from vulnctl.models import KevData, SourceMeta, Unavailable, UnavailableReason
 
 FEED_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
@@ -128,7 +128,7 @@ class KevAdapter(SourceAdapter):
         try:
             response = await self._client.get(FEED_URL, follow_redirects=True)
             response.raise_for_status()
-            catalog = _reduce_feed(response.json())
+            catalog = None if body_too_large(response) else _reduce_feed(response.json())
         except (httpx.HTTPError, ValueError):
             catalog = None
         if catalog is not None:

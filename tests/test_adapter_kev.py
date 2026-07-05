@@ -88,6 +88,25 @@ async def test_single_fetch_serves_all_cves_and_caches(
     assert second["CVE-2019-0708"].data.listed is True
 
 
+async def test_oversized_feed_degrades_to_source_down(
+    cache: Cache,
+    load_fixture: LoadFixture,
+    fixture_client: MakeClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from vulnctl.adapters import base
+
+    monkeypatch.setattr(base, "MAX_RESPONSE_BYTES", 16)
+    body = load_fixture("kev", "catalog.json")
+    async with fixture_client(lambda request: httpx.Response(200, text=body)) as client:
+        adapter = KevAdapter(client, cache)
+        results = await adapter.fetch(["CVE-2021-44228"])
+
+    data = results["CVE-2021-44228"].data
+    assert isinstance(data, Unavailable)
+    assert data.reason is UnavailableReason.SOURCE_DOWN
+
+
 async def test_offline_uses_bundled_snapshot(cache: Cache, fixture_client: MakeClient) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError("offline mode must never touch the network")

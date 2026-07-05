@@ -35,6 +35,7 @@ from vulnctl.adapters.base import (
     RateLimiter,
     SourceAdapter,
     SourceResult,
+    body_too_large,
     bounded_gather,
     register,
 )
@@ -121,12 +122,9 @@ class NvdAdapter(SourceAdapter):
         results: dict[str, SourceResult] = {}
         misses: list[str] = []
         for cve_id in cve_ids:
-            entry = self._cache.get_entry(self.name, cve_id, self._cache_ttl())
-            if entry is not None:
-                results[cve_id] = SourceResult(
-                    data=NvdData.model_validate_json(entry.payload),
-                    meta=self._meta(entry.fetched_at, cache_hit=True),
-                )
+            cached = self._cached_result(cve_id)
+            if cached is not None:
+                results[cve_id] = cached
             else:
                 misses.append(cve_id)
 
@@ -139,6 +137,16 @@ class NvdAdapter(SourceAdapter):
             fetched = await bounded_gather((self._fetch_one(cve_id) for cve_id in misses), limit=4)
             results.update(zip(misses, fetched, strict=True))
         return results
+
+    def _cached_result(self, cve_id: str) -> SourceResult | None:
+        entry = self._cache.get_entry(self.name, cve_id, self._cache_ttl())
+        if entry is None:
+            return None
+        try:
+            data = NvdData.model_validate_json(entry.payload)
+        except ValidationError:
+            return None  # cache row written by an incompatible version: refetch
+        return SourceResult(data=data, meta=self._meta(entry.fetched_at, cache_hit=True))
 
     async def _fetch_one(self, cve_id: str) -> SourceResult:
         last_status = 0
@@ -157,6 +165,10 @@ class NvdAdapter(SourceAdapter):
                 continue
             if last_status != 200:
                 return self._unavailable(UnavailableReason.SOURCE_DOWN, f"HTTP {last_status}")
+            if body_too_large(response):
+                return self._unavailable(
+                    UnavailableReason.SOURCE_DOWN, "response exceeds size limit"
+                )
             try:
                 payload = response.json()
             except ValueError as exc:
