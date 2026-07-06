@@ -92,6 +92,59 @@ def test_enrich_invalid_cve_rejected() -> None:
     assert "GHSA-jfh8-c2jp-5v3q" in result.output
 
 
+NPM_SBOM = Path(__file__).parent / "fixtures" / "sbom" / "npm-app.cdx.json"
+NPM_SCAN = Path(__file__).parent / "fixtures" / "grype" / "npm-app.json"
+
+
+def test_enrich_requires_exactly_one_input_mode() -> None:
+    both = runner.invoke(app, ["enrich", "CVE-2021-44228", "--sbom", str(NPM_SBOM)])
+    assert both.exit_code != 0
+    assert "exactly one input mode" in both.output
+    two_files = runner.invoke(app, ["enrich", "--sbom", str(NPM_SBOM), "--grype", str(NPM_SCAN)])
+    assert two_files.exit_code != 0
+    assert "exactly one input mode" in two_files.output
+    neither = runner.invoke(app, ["enrich"])
+    assert neither.exit_code != 0
+    assert "exactly one input mode" in neither.output
+
+
+def test_enrich_sbom_offline_cold_cache_degrades_but_succeeds() -> None:
+    """Offline with an empty cache: discovery degrades to warnings, run still exits 0."""
+    result = runner.invoke(app, ["enrich", "--offline", "--sbom", str(NPM_SBOM)])
+    assert result.exit_code == 0
+    assert "vulnctl enrichment" in result.output
+    assert "degraded" in result.output  # skipped component + offline discovery
+
+
+def test_enrich_sbom_malformed_fails_loudly(tmp_path: Path) -> None:
+    bad = tmp_path / "app.cdx.json"
+    bad.write_text('{"bomFormat": "SPDX"}')
+    result = runner.invoke(app, ["enrich", "--sbom", str(bad)])
+    assert result.exit_code == 1
+    assert "not a CycloneDX SBOM" in result.output
+
+
+def test_enrich_grype_offline_renders_findings() -> None:
+    result = runner.invoke(app, ["enrich", "--offline", "--grype", str(NPM_SCAN)])
+    assert result.exit_code == 0
+    assert "CVE-2021-23337" in result.output
+    assert "pkg:npm/lodash@4.17.20" in result.output  # Package column on scanner runs
+
+
+def test_enrich_grype_reads_stdin_via_dash() -> None:
+    result = runner.invoke(app, ["enrich", "--offline", "--grype", "-"], input=NPM_SCAN.read_text())
+    assert result.exit_code == 0
+    assert "CVE-2021-23337" in result.output
+
+
+def test_enrich_grype_malformed_fails_loudly(tmp_path: Path) -> None:
+    bad = tmp_path / "scan.json"
+    bad.write_text('{"vulnerabilities": []}')
+    result = runner.invoke(app, ["enrich", "--grype", str(bad)])
+    assert result.exit_code == 1
+    assert "no 'matches' key" in result.output
+
+
 def test_cache_stats_renders_counts(tmp_path: Path) -> None:
     with Cache() as cache:
         cache.set("epss", "CVE-2021-44228", "{}")

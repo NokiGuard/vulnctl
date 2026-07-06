@@ -13,9 +13,10 @@ from rich.table import Table
 
 from vulnctl.cache import Cache
 from vulnctl.context import ContextError, load_context
+from vulnctl.ingest import IngestError
 from vulnctl.ingest.cve_list import parse_cve_ids
 from vulnctl.output.table import build_paths, build_table
-from vulnctl.pipeline import apply_tree, enrich_findings
+from vulnctl.pipeline import apply_tree, enrich_findings, enrich_grype, enrich_sbom
 from vulnctl.ssvc.engine import EvaluationError
 from vulnctl.ssvc.tree import TreeError, load_bundled_tree, load_tree
 
@@ -54,9 +55,20 @@ def main(
 @app.command()
 def enrich(
     cve_ids: Annotated[
-        list[str],
-        typer.Argument(metavar="CVE_ID...", help="One or more CVE IDs, e.g. CVE-2021-44228."),
-    ],
+        list[str] | None,
+        typer.Argument(
+            metavar="[CVE_ID...]",
+            help="CVE IDs, e.g. CVE-2021-44228 (omit when using --sbom).",
+        ),
+    ] = None,
+    sbom_path: Annotated[
+        Path | None,
+        typer.Option("--sbom", help="CycloneDX 1.4/1.5 JSON SBOM; components resolve via OSV."),
+    ] = None,
+    grype_source: Annotated[
+        str | None,
+        typer.Option("--grype", help="Grype JSON output file, or '-' to read stdin."),
+    ] = None,
     offline: Annotated[
         bool,
         typer.Option(
@@ -77,18 +89,30 @@ def enrich(
         typer.Option("--show-path", help="Print each finding's full decision path."),
     ] = False,
 ) -> None:
-    """Enrich CVE IDs with threat intel and rank them with SSVC verdicts."""
-    try:
-        findings = parse_cve_ids(cve_ids)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
+    """Enrich CVE IDs, an SBOM, or a Grype scan with intel and rank with SSVC verdicts."""
+    given_ids = cve_ids or []
+    if sum([bool(given_ids), sbom_path is not None, grype_source is not None]) != 1:
+        raise typer.BadParameter("provide CVE IDs, --sbom, or --grype (exactly one input mode)")
+    findings = None
+    if given_ids:
+        try:
+            findings = parse_cve_ids(given_ids)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from exc
     try:
         org_context = load_context(context_path)
         tree = load_tree(tree_path) if tree_path is not None else load_bundled_tree()
         with Cache() as cache:
-            results, metadata = asyncio.run(enrich_findings(findings, cache=cache, offline=offline))
+            if findings is not None:
+                run = enrich_findings(findings, cache=cache, offline=offline)
+            elif sbom_path is not None:
+                run = enrich_sbom(sbom_path, cache=cache, offline=offline)
+            else:
+                assert grype_source is not None  # guaranteed by the input-mode check
+                run = enrich_grype(grype_source, cache=cache, offline=offline)
+            results, metadata = asyncio.run(run)
         ranked = apply_tree(results, org_context, tree)
-    except (ContextError, TreeError, EvaluationError) as exc:
+    except (IngestError, ContextError, TreeError, EvaluationError) as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(1) from exc
     console.print(build_table(ranked, metadata))

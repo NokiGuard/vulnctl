@@ -16,6 +16,7 @@ from vulnctl.models import (
     Finding,
     IngestSource,
     KevData,
+    PackageRef,
     RankedResult,
     RunMetadata,
     SourceMeta,
@@ -42,14 +43,16 @@ def _result(
     kev: KevData | Unavailable = _DOWN,
     cvss: CvssData | Unavailable = _DOWN,
     degraded: bool = False,
+    package: PackageRef | None = None,
 ) -> RankedResult:
     return RankedResult(
-        finding=Finding(cve_id=cve_id, source=IngestSource.CLI),
+        finding=Finding(cve_id=cve_id, source=IngestSource.CLI, package=package),
         enrichment=Enrichment(
             epss=epss,
             kev=kev,
             cvss=cvss,
             versions=_NOT_IMPL,
+            advisory=_NOT_IMPL,
             exploits=_NOT_IMPL,
             provenance={"test": _META},
         ),
@@ -145,6 +148,25 @@ def test_caption_summarizes_run_metadata() -> None:
 
     offline_meta = _METADATA.model_copy(update={"offline": True})
     assert "offline mode" in " ".join(_render(build_table([row], offline_meta)).split())
+
+
+def test_package_column_only_on_package_bearing_runs() -> None:
+    plain = _render(build_table([_result("CVE-2020-1111", decision=Decision.TRACK)], _METADATA))
+    assert "Package" not in plain
+
+    rows = [
+        _result(
+            "CVE-2021-23337",
+            decision=Decision.TRACK,
+            package=PackageRef(purl="pkg:npm/lodash@4.17.20", version="4.17.20"),
+        ),
+        _result("CVE-2020-1111", decision=Decision.TRACK),  # mixed run: cell falls back to —
+    ]
+    text = _render(build_table(rows, _METADATA))
+    assert "Package" in text
+    assert "pkg:npm/lodash@4.17.20" in text
+    # The version is not appended twice when the purl already embeds it.
+    assert "4.17.20@4.17.20" not in text
 
 
 def test_paths_render_every_step_with_sources() -> None:

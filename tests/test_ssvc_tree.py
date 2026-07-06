@@ -49,7 +49,13 @@ def enrichment(
     cvss: CvssData | Unavailable = _UNAVAILABLE,
 ) -> Enrichment:
     return Enrichment(
-        epss=_EPSS, kev=kev, cvss=cvss, versions=_UNAVAILABLE, exploits=exploits, provenance={}
+        epss=_EPSS,
+        kev=kev,
+        cvss=cvss,
+        versions=_UNAVAILABLE,
+        advisory=_UNAVAILABLE,
+        exploits=exploits,
+        provenance={},
     )
 
 

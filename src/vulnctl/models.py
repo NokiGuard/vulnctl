@@ -53,7 +53,19 @@ class PackageRef(BaseModel):
 
 
 class Finding(BaseModel):
-    """Normalized unit of work produced by the ingest layer."""
+    """Normalized unit of work produced by the ingest layer.
+
+    ``cve_id`` holds the canonical vulnerability ID: a CVE ID where one
+    exists, else the native OSV/GHSA ID (SBOM path — alias resolution
+    happens in the OSV adapter). ``aliases`` records the other IDs the same
+    vulnerability is known by, preserving the audit trail of that
+    resolution (e.g. the GHSA ID that resolved to this CVE).
+
+    ``scanner_severity`` is the ingesting scanner's own severity label,
+    carried as informational metadata only — it never feeds the SSVC
+    engine. ``locations`` lists the file paths a scanner reported for this
+    finding (several when layer dedup merged repeated matches).
+    """
 
     model_config = _MODEL_CONFIG
 
@@ -61,6 +73,9 @@ class Finding(BaseModel):
     source: IngestSource
     package: PackageRef | None = None
     asset_hint: str | None = None
+    aliases: list[str] = []
+    scanner_severity: str | None = None
+    locations: list[str] = []
 
 
 class EpssData(BaseModel):
@@ -115,6 +130,23 @@ class VersionData(BaseModel):
     fixed: list[str] = []
 
 
+class GhsaData(BaseModel):
+    """GitHub Security Advisory detail for one vulnerability.
+
+    ``severity`` is GitHub's label, informational only — it never feeds the
+    SSVC engine. ``versions`` holds GHSA's own ranges verbatim; they are kept
+    here even when OSV's data fills the canonical ``Enrichment.versions``
+    (keep-both policy, see pipeline module docstring).
+    """
+
+    model_config = _MODEL_CONFIG
+
+    ghsa_id: str
+    severity: str
+    summary: str
+    versions: VersionData
+
+
 class ExploitData(BaseModel):
     """Public exploit presence indicators."""
 
@@ -149,6 +181,7 @@ class Enrichment(BaseModel):
     cvss: CvssData | Unavailable
     cwes: list[str] = []
     versions: VersionData | Unavailable
+    advisory: GhsaData | Unavailable
     exploits: ExploitData | Unavailable
     provenance: dict[str, SourceMeta] = {}
 

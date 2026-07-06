@@ -16,6 +16,7 @@ from vulnctl.models import (
     EpssData,
     ExploitData,
     Finding,
+    GhsaData,
     IngestSource,
     KevData,
     PackageRef,
@@ -46,12 +47,19 @@ FINDING = Finding(
     package=PACKAGE,
     asset_hint="payments-api",
 )
+ADVISORY = GhsaData(
+    ghsa_id="GHSA-jfh8-c2jp-5v3q",
+    severity="critical",
+    summary="Remote code injection in Log4j",
+    versions=VERSIONS,
+)
 ENRICHMENT = Enrichment(
     epss=EPSS,
     kev=KEV,
     cvss=CVSS,
     cwes=["CWE-502", "CWE-917"],
     versions=VERSIONS,
+    advisory=ADVISORY,
     exploits=EXPLOITS,
     provenance={"epss": META},
 )
@@ -60,6 +68,7 @@ DEGRADED_ENRICHMENT = Enrichment(
     kev=UNAVAILABLE,
     cvss=Unavailable(reason=UnavailableReason.NOT_FOUND),
     versions=Unavailable(reason=UnavailableReason.RATE_LIMITED),
+    advisory=UNAVAILABLE,
     exploits=UNAVAILABLE,
 )
 PATH = DecisionPath(
@@ -78,6 +87,7 @@ ALL_MODELS = [
     KEV,
     CVSS,
     VERSIONS,
+    ADVISORY,
     EXPLOITS,
     META,
     UNAVAILABLE,

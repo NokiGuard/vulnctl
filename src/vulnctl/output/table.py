@@ -18,6 +18,7 @@ from vulnctl.models import (
     Decision,
     EpssData,
     KevData,
+    PackageRef,
     RankedResult,
     RunMetadata,
     Unavailable,
@@ -60,6 +61,14 @@ def _epss_cell(epss: EpssData | Unavailable) -> str:
     return f"{epss.score:.3f} (p{epss.percentile * 100:.1f})"
 
 
+def _package_cell(package: PackageRef | None) -> str:
+    if package is None:
+        return "[dim]—[/dim]"
+    if package.version and not package.purl.endswith(f"@{package.version}"):
+        return f"{package.purl}@{package.version}"
+    return package.purl
+
+
 def _kev_cell(kev: KevData | Unavailable) -> str:
     if isinstance(kev, Unavailable):
         return _na(kev)
@@ -93,9 +102,16 @@ def _caption(metadata: RunMetadata) -> str:
 
 
 def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
-    """Render ranked findings as a rich Table, most urgent decision first."""
+    """Render ranked findings as a rich Table, most urgent decision first.
+
+    A Package column appears only when a finding carries one (SBOM/scanner
+    paths) — the CVE-list path stays as compact as before.
+    """
+    with_packages = any(result.finding.package is not None for result in results)
     table = Table(title="vulnctl enrichment", caption=_caption(metadata))
     table.add_column("CVE", no_wrap=True)
+    if with_packages:
+        table.add_column("Package", overflow="fold")
     table.add_column("Decision", no_wrap=True)
     table.add_column("CVSS")
     table.add_column("EPSS")
@@ -104,14 +120,17 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
 
     for result in sorted(results, key=_sort_key):
         enrichment = result.enrichment
-        table.add_row(
+        row = [
             result.finding.cve_id,
             _decision_cell(result.verdict.decision),
             _cvss_cell(enrichment.cvss),
             _epss_cell(enrichment.epss),
             _kev_cell(enrichment.kev),
             "[dim]—[/dim]",  # exploit-presence adapter arrives in M5
-        )
+        ]
+        if with_packages:
+            row.insert(1, _package_cell(result.finding.package))
+        table.add_row(*row)
     return table
 
 
