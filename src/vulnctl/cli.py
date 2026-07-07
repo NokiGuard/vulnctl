@@ -59,12 +59,12 @@ def enrich(
         list[str] | None,
         typer.Argument(
             metavar="[CVE_ID...]",
-            help="CVE IDs, e.g. CVE-2021-44228 (omit when using --sbom).",
+            help="CVE IDs, e.g. CVE-2021-44228 (omit when using --sbom or --grype).",
         ),
     ] = None,
     sbom_path: Annotated[
         Path | None,
-        typer.Option("--sbom", help="CycloneDX 1.4/1.5 JSON SBOM; components resolve via OSV."),
+        typer.Option("--sbom", help="CycloneDX 1.4-1.6 JSON SBOM; components resolve via OSV."),
     ] = None,
     grype_source: Annotated[
         str | None,
