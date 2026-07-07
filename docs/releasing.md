@@ -102,6 +102,52 @@ vulnctl --version           # → vulnctl 0.1.0
 
 PyPI also shows the PEP 740 attestations on the project's release files page.
 
+## Fresh-machine install test
+
+Verify a clean install with nothing cached, in a throwaway container. Run the
+PyPI variant after publish; use the wheel variant to test before publishing.
+
+**From PyPI (post-publish):**
+
+```bash
+docker run --rm python:3.12-slim bash -c '
+  set -eux
+  pip install --no-cache-dir --quiet pipx
+  export PATH="/root/.local/bin:$PATH"
+  pipx install "vulnctl==0.1.0"
+  vulnctl --version                                    # → vulnctl 0.1.0
+  vulnctl enrich --offline CVE-2021-44228 --show-path  # offline first run (bundled snapshots)
+  vulnctl enrich CVE-2021-44228 --show-path            # online first run (live intel)
+'
+```
+
+**From the built wheel (pre-publish).** Download the `dist` artifact from a
+release or dry run into `./dist`, then:
+
+```bash
+docker run --rm -v "$PWD/dist:/dist:ro" python:3.12-slim bash -c '
+  set -eux
+  pip install --no-cache-dir --quiet pipx
+  export PATH="/root/.local/bin:$PATH"
+  pipx install /dist/vulnctl-0.1.0-py3-none-any.whl
+  vulnctl --version
+  vulnctl enrich --offline CVE-2021-44228 --show-path
+'
+```
+
+**Strict offline proof (no network at all).** Install into a volume, then run
+the offline path with networking fully disabled — it must still print an `ACT`
+verdict from the bundled EPSS/KEV/exploit snapshots:
+
+```bash
+docker volume create vulnctl-env
+docker run --rm -v vulnctl-env:/env python:3.12-slim \
+  bash -c 'python -m venv /env && /env/bin/pip install --no-cache-dir "vulnctl==0.1.0"'
+docker run --rm --network none -v vulnctl-env:/env python:3.12-slim \
+  /env/bin/vulnctl enrich --offline CVE-2021-44228 --show-path
+docker volume rm vulnctl-env
+```
+
 ## Yank a bad release
 
 PyPI releases are **immutable** — you cannot re-upload the same version. If a
