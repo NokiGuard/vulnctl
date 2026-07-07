@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
@@ -88,7 +89,7 @@ def test_enrich_bad_tree_file_fails_loudly(tmp_path: Path) -> None:
 
 def test_enrich_invalid_cve_rejected() -> None:
     result = runner.invoke(app, ["enrich", "CVE-2021-44228", "GHSA-jfh8-c2jp-5v3q"])
-    assert result.exit_code != 0
+    assert result.exit_code == 1  # input error, not a usage (2) or gate (2) code
     assert "GHSA-jfh8-c2jp-5v3q" in result.output
 
 
@@ -97,15 +98,14 @@ NPM_SCAN = Path(__file__).parent / "fixtures" / "grype" / "npm-app.json"
 
 
 def test_enrich_requires_exactly_one_input_mode() -> None:
-    both = runner.invoke(app, ["enrich", "CVE-2021-44228", "--sbom", str(NPM_SBOM)])
-    assert both.exit_code != 0
-    assert "exactly one input mode" in both.output
-    two_files = runner.invoke(app, ["enrich", "--sbom", str(NPM_SBOM), "--grype", str(NPM_SCAN)])
-    assert two_files.exit_code != 0
-    assert "exactly one input mode" in two_files.output
-    neither = runner.invoke(app, ["enrich"])
-    assert neither.exit_code != 0
-    assert "exactly one input mode" in neither.output
+    for args in (
+        ["enrich", "CVE-2021-44228", "--sbom", str(NPM_SBOM)],
+        ["enrich", "--sbom", str(NPM_SBOM), "--grype", str(NPM_SCAN)],
+        ["enrich"],
+    ):
+        result = runner.invoke(app, args)
+        assert result.exit_code == 1
+        assert "exactly one input" in result.output
 
 
 def test_enrich_sbom_offline_cold_cache_degrades_but_succeeds() -> None:
@@ -143,6 +143,52 @@ def test_enrich_grype_malformed_fails_loudly(tmp_path: Path) -> None:
     result = runner.invoke(app, ["enrich", "--grype", str(bad)])
     assert result.exit_code == 1
     assert "no 'matches' key" in result.output
+
+
+def test_enrich_json_format_is_valid() -> None:
+    result = runner.invoke(app, ["enrich", "--offline", "-f", "json", "CVE-2021-44228"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "1"
+
+
+def test_enrich_markdown_format() -> None:
+    result = runner.invoke(app, ["enrich", "--offline", "-f", "md", "CVE-2021-44228"])
+    assert result.exit_code == 0
+    assert result.output.startswith("# vulnctl report")
+    assert "## Summary" in result.output
+
+
+# --- exit-code contract (SPEC FR-17): 0 ok, 1 input/config, 2 gate ------------
+
+
+def test_fail_on_act_trips_on_act_verdict() -> None:
+    # CVE-2021-44228 is KEV-listed → ACT on the default internet/high context.
+    result = runner.invoke(app, ["enrich", "--offline", "--fail-on", "act", "CVE-2021-44228"])
+    assert result.exit_code == 2
+    assert "CVE-2021-44228" in result.output  # output is still emitted before the gate
+
+
+def test_fail_on_act_passes_when_below_threshold() -> None:
+    # CVE-2010-0017 has a public exploit but is not KEV-listed → ATTEND, below ACT.
+    result = runner.invoke(app, ["enrich", "--offline", "--fail-on", "act", "CVE-2010-0017"])
+    assert result.exit_code == 0
+
+
+def test_fail_on_attend_trips_on_attend_verdict() -> None:
+    result = runner.invoke(app, ["enrich", "--offline", "--fail-on", "attend", "CVE-2010-0017"])
+    assert result.exit_code == 2
+
+
+def test_no_gate_exits_zero_even_on_act() -> None:
+    result = runner.invoke(app, ["enrich", "--offline", "CVE-2021-44228"])
+    assert result.exit_code == 0
+
+
+def test_input_error_beats_gate_exit_code() -> None:
+    # A bad CVE must exit 1 (input), never 2 — even with --fail-on set.
+    result = runner.invoke(app, ["enrich", "--offline", "--fail-on", "act", "NOPE"])
+    assert result.exit_code == 1
 
 
 def test_cache_stats_renders_counts(tmp_path: Path) -> None:

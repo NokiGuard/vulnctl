@@ -17,12 +17,14 @@ from vulnctl.models import (
     CvssData,
     Decision,
     EpssData,
+    ExploitData,
     KevData,
     PackageRef,
     RankedResult,
     RunMetadata,
     Unavailable,
 )
+from vulnctl.output import result_sort_key
 
 _SEVERITY_STYLE = {
     "CRITICAL": "bold red",
@@ -69,6 +71,20 @@ def _package_cell(package: PackageRef | None) -> str:
     return package.purl
 
 
+def _exploits_cell(exploits: ExploitData | Unavailable) -> str:
+    if isinstance(exploits, Unavailable):
+        return _na(exploits)
+    counts = {
+        "EDB": len(exploits.edb_ids),
+        "MSF": len(exploits.msf_modules),
+        "nuclei": len(exploits.nuclei_templates),
+    }
+    present = [f"{label}·{n}" for label, n in counts.items() if n]
+    if not present:
+        return "[dim]none[/dim]"
+    return f"[red]{' '.join(present)}[/red]"
+
+
 def _kev_cell(kev: KevData | Unavailable) -> str:
     if isinstance(kev, Unavailable):
         return _na(kev)
@@ -77,16 +93,6 @@ def _kev_cell(kev: KevData | Unavailable) -> str:
     added = f" {kev.date_added.isoformat()}" if kev.date_added is not None else ""
     ransomware = " [bold red]ransomware[/bold red]" if kev.ransomware else ""
     return f"[red]yes[/red]{added}{ransomware}"
-
-
-def _sort_key(result: RankedResult) -> tuple[int, float, float]:
-    epss = result.enrichment.epss
-    cvss = result.enrichment.cvss
-    return (
-        -result.verdict.decision.rank,
-        -(epss.score if isinstance(epss, EpssData) else -1.0),
-        -(cvss.base_score if isinstance(cvss, CvssData) else -1.0),
-    )
 
 
 def _caption(metadata: RunMetadata) -> str:
@@ -118,7 +124,7 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
     table.add_column("KEV")
     table.add_column("Exploits")
 
-    for result in sorted(results, key=_sort_key):
+    for result in sorted(results, key=result_sort_key):
         enrichment = result.enrichment
         row = [
             result.finding.cve_id,
@@ -126,7 +132,7 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
             _cvss_cell(enrichment.cvss),
             _epss_cell(enrichment.epss),
             _kev_cell(enrichment.kev),
-            "[dim]—[/dim]",  # exploit-presence adapter arrives in M5
+            _exploits_cell(enrichment.exploits),
         ]
         if with_packages:
             row.insert(1, _package_cell(result.finding.package))
@@ -137,7 +143,7 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
 def build_paths(results: list[RankedResult]) -> RenderableType:
     """Full decision path per finding (``--show-path``), in table order."""
     blocks: list[RenderableType] = [Text()]
-    for result in sorted(results, key=_sort_key):
+    for result in sorted(results, key=result_sort_key):
         verdict = result.verdict
         header = Text(result.finding.cve_id, style="bold")
         header.append(" → ")

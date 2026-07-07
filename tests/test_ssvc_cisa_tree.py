@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from test_ssvc_tree import _AUTOMATABLE_CVSS, enrichment
+from test_ssvc_tree import _AUTOMATABLE_CVSS, _MANUAL_CVSS, enrichment
 from vulnctl.context import Exposure, MissionImpact, OrgContext
-from vulnctl.models import Decision, KevData
+from vulnctl.models import Decision, ExploitData, KevData
 from vulnctl.ssvc.engine import evaluate
 from vulnctl.ssvc.tree import load_bundled_tree
 
@@ -107,10 +107,10 @@ def test_log4shell_style_finding_is_act() -> None:
     ]
 
 
-def test_unlisted_cve_with_missing_data_flows_through_defaults() -> None:
-    """KEV says unlisted, exploits+CVSS unavailable: both derived points default,
-    the path records it, and the verdict is flagged degraded (M2 reality until
-    the exploit adapter lands in M5)."""
+def test_unlisted_cve_with_unavailable_data_flows_through_defaults() -> None:
+    """Degraded-source case: KEV unlisted but exploit *and* CVSS data are
+    Unavailable (e.g. a corrupt snapshot), so both derived points abstain to
+    the tree default and the verdict is flagged degraded."""
     verdict = evaluate(
         enrichment(kev=KevData(listed=False)),
         OrgContext(exposure=Exposure.INTERNET, mission_impact=MissionImpact.HIGH),
@@ -123,6 +123,46 @@ def test_unlisted_cve_with_missing_data_flows_through_defaults() -> None:
         ("exploitation", "none", "default"),
         ("exposure", "open", "context"),
         ("automatable", "yes", "default"),
+        ("human_impact", "high", "context"),
+    ]
+
+
+def test_no_exploit_and_unlisted_resolves_none_not_degraded() -> None:
+    """The common exploit-adapter case: KEV unlisted and the index has no
+    exploit (empty ExploitData, not Unavailable) is a real 'none' answer
+    sourced from kev+exploits — exploitation is not degraded."""
+    verdict = evaluate(
+        enrichment(kev=KevData(listed=False), exploits=ExploitData(), cvss=_MANUAL_CVSS),
+        OrgContext(exposure=Exposure.INTERNET, mission_impact=MissionImpact.HIGH),
+        TREE,
+    )
+    # none/open/no/high → track* per the table, but nothing defaulted.
+    assert verdict.decision is Decision.TRACK_STAR
+    assert verdict.inputs_degraded is False
+    assert [(s.node, s.value, s.value_source) for s in verdict.path.steps[:1]] == [
+        ("exploitation", "none", "kev+exploits"),
+    ]
+
+
+def test_poc_from_real_exploit_data() -> None:
+    """A KEV-unlisted CVE with a public exploit resolves exploitation=poc from
+    real ExploitData (not via override or default), sourced 'exploits'."""
+    verdict = evaluate(
+        enrichment(
+            kev=KevData(listed=False),
+            exploits=ExploitData(msf_modules=["exploit/multi/http/log4shell_header_injection"]),
+            cvss=_MANUAL_CVSS,
+        ),
+        OrgContext(exposure=Exposure.INTERNET, mission_impact=MissionImpact.HIGH),
+        TREE,
+    )
+    # poc/open/no/high → track* per the table; exploitation sourced from exploits.
+    assert verdict.decision is Decision.TRACK_STAR
+    assert verdict.inputs_degraded is False
+    assert [(s.node, s.value, s.value_source) for s in verdict.path.steps] == [
+        ("exploitation", "poc", "exploits"),
+        ("exposure", "open", "context"),
+        ("automatable", "no", "cvss"),
         ("human_impact", "high", "context"),
     ]
 

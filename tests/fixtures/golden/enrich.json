@@ -1,0 +1,252 @@
+{
+  "schema_version": "1",
+  "run": {
+    "sources": [
+      "epss",
+      "exploits",
+      "ghsa",
+      "kev",
+      "nvd",
+      "osv"
+    ],
+    "offline": true,
+    "cache_hit_rate": {
+      "epss": 0.0,
+      "exploits": 0.0,
+      "ghsa": 0.0,
+      "kev": 0.0,
+      "nvd": 0.0,
+      "osv": 0.0
+    },
+    "degradations": [
+      "epss: CVE-2010-0017 unavailable (offline)",
+      "ghsa: CVE-2010-0017 unavailable (offline)",
+      "ghsa: CVE-2021-44228 unavailable (offline)",
+      "nvd: CVE-2010-0017 unavailable (offline)",
+      "nvd: CVE-2021-44228 unavailable (offline)",
+      "osv: CVE-2010-0017 unavailable (offline)",
+      "osv: CVE-2021-44228 unavailable (offline)"
+    ]
+  },
+  "results": [
+    {
+      "finding": {
+        "cve_id": "CVE-2021-44228",
+        "source": "cli",
+        "package": null,
+        "asset_hint": null,
+        "aliases": [],
+        "scanner_severity": null,
+        "locations": []
+      },
+      "enrichment": {
+        "epss": {
+          "score": 0.99999,
+          "percentile": 1.0,
+          "date": "2026-07-04"
+        },
+        "kev": {
+          "listed": true,
+          "date_added": "2021-12-10",
+          "ransomware": true
+        },
+        "cvss": {
+          "reason": "offline",
+          "detail": "NVD has no bundled snapshot; cache miss"
+        },
+        "cwes": [],
+        "versions": {
+          "reason": "offline",
+          "detail": "OSV has no bundled snapshot; cache miss"
+        },
+        "advisory": {
+          "reason": "offline",
+          "detail": "GHSA has no bundled snapshot; cache miss"
+        },
+        "exploits": {
+          "edb_ids": [
+            "50590",
+            "50592",
+            "51183"
+          ],
+          "msf_modules": [
+            "auxiliary/scanner/http/log4shell_scanner",
+            "exploit/linux/http/mobileiron_core_log4shell",
+            "exploit/multi/http/log4shell_header_injection",
+            "exploit/multi/http/ubiquiti_unifi_log4shell",
+            "exploit/multi/http/vmware_vcenter_log4shell"
+          ],
+          "nuclei_templates": [
+            "http/cves/2021/CVE-2021-44228.yaml"
+          ]
+        },
+        "provenance": {
+          "epss": {
+            "source": "epss",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "kev": {
+            "source": "kev",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "nvd": {
+            "source": "nvd",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "osv": {
+            "source": "osv",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "ghsa": {
+            "source": "ghsa",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "exploits": {
+            "source": "exploits",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          }
+        }
+      },
+      "verdict": {
+        "decision": "act",
+        "path": {
+          "steps": [
+            {
+              "node": "exploitation",
+              "value": "active",
+              "value_source": "kev"
+            },
+            {
+              "node": "exposure",
+              "value": "open",
+              "value_source": "context"
+            },
+            {
+              "node": "automatable",
+              "value": "yes",
+              "value_source": "default"
+            },
+            {
+              "node": "human_impact",
+              "value": "high",
+              "value_source": "context"
+            }
+          ]
+        },
+        "tree_id": "cisa-deployer-v1",
+        "inputs_degraded": true
+      }
+    },
+    {
+      "finding": {
+        "cve_id": "CVE-2010-0017",
+        "source": "cli",
+        "package": null,
+        "asset_hint": null,
+        "aliases": [],
+        "scanner_severity": null,
+        "locations": []
+      },
+      "enrichment": {
+        "epss": {
+          "reason": "offline",
+          "detail": "not in cache or bundled EPSS snapshot"
+        },
+        "kev": {
+          "listed": false,
+          "date_added": null,
+          "ransomware": false
+        },
+        "cvss": {
+          "reason": "offline",
+          "detail": "NVD has no bundled snapshot; cache miss"
+        },
+        "cwes": [],
+        "versions": {
+          "reason": "offline",
+          "detail": "OSV has no bundled snapshot; cache miss"
+        },
+        "advisory": {
+          "reason": "offline",
+          "detail": "GHSA has no bundled snapshot; cache miss"
+        },
+        "exploits": {
+          "edb_ids": [
+            "12258"
+          ],
+          "msf_modules": [
+            "auxiliary/dos/windows/smb/ms10_006_negotiate_response_loop"
+          ],
+          "nuclei_templates": []
+        },
+        "provenance": {
+          "epss": {
+            "source": "epss",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "kev": {
+            "source": "kev",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "nvd": {
+            "source": "nvd",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "osv": {
+            "source": "osv",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "ghsa": {
+            "source": "ghsa",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          },
+          "exploits": {
+            "source": "exploits",
+            "fetched_at": "<ts>",
+            "cache_hit": false
+          }
+        }
+      },
+      "verdict": {
+        "decision": "attend",
+        "path": {
+          "steps": [
+            {
+              "node": "exploitation",
+              "value": "poc",
+              "value_source": "exploits"
+            },
+            {
+              "node": "exposure",
+              "value": "open",
+              "value_source": "context"
+            },
+            {
+              "node": "automatable",
+              "value": "yes",
+              "value_source": "default"
+            },
+            {
+              "node": "human_impact",
+              "value": "high",
+              "value_source": "context"
+            }
+          ]
+        },
+        "tree_id": "cisa-deployer-v1",
+        "inputs_degraded": true
+      }
+    }
+  ]
+}

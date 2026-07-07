@@ -1,0 +1,614 @@
+{
+  "$defs": {
+    "CvssData": {
+      "additionalProperties": false,
+      "description": "CVSS scoring data (NVD).",
+      "properties": {
+        "vector": {
+          "title": "Vector",
+          "type": "string"
+        },
+        "base_score": {
+          "maximum": 10.0,
+          "minimum": 0.0,
+          "title": "Base Score",
+          "type": "number"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vector",
+        "base_score",
+        "severity"
+      ],
+      "title": "CvssData",
+      "type": "object"
+    },
+    "Decision": {
+      "description": "SSVC outcome, in ascending priority order. Compare via :attr:`rank`.",
+      "enum": [
+        "track",
+        "track*",
+        "attend",
+        "act"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "DecisionPath": {
+      "additionalProperties": false,
+      "description": "Ordered record of every node visited en route to a decision.",
+      "properties": {
+        "steps": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DecisionPathStep"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "title": "DecisionPath",
+      "type": "object"
+    },
+    "DecisionPathStep": {
+      "additionalProperties": false,
+      "description": "One tree-node visit: which input was read, its value, and its origin.",
+      "properties": {
+        "node": {
+          "title": "Node",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "value_source": {
+          "title": "Value Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node",
+        "value",
+        "value_source"
+      ],
+      "title": "DecisionPathStep",
+      "type": "object"
+    },
+    "Enrichment": {
+      "additionalProperties": false,
+      "description": "Fused intelligence for one finding, produced by the pipeline.\n\nEach source-backed field is either its data model or ``Unavailable`` \u2014\na source outage degrades the field, never the run (SPEC.md FR-8).",
+      "properties": {
+        "epss": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EpssData"
+            },
+            {
+              "$ref": "#/$defs/Unavailable"
+            }
+          ],
+          "title": "Epss"
+        },
+        "kev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KevData"
+            },
+            {
+              "$ref": "#/$defs/Unavailable"
+            }
+          ],
+          "title": "Kev"
+        },
+        "cvss": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CvssData"
+            },
+            {
+              "$ref": "#/$defs/Unavailable"
+            }
+          ],
+          "title": "Cvss"
+        },
+        "cwes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Cwes",
+          "type": "array"
+        },
+        "versions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionData"
+            },
+            {
+              "$ref": "#/$defs/Unavailable"
+            }
+          ],
+          "title": "Versions"
+        },
+        "advisory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GhsaData"
+            },
+            {
+              "$ref": "#/$defs/Unavailable"
+            }
+          ],
+          "title": "Advisory"
+        },
+        "exploits": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExploitData"
+            },
+            {
+              "$ref": "#/$defs/Unavailable"
+            }
+          ],
+          "title": "Exploits"
+        },
+        "provenance": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SourceMeta"
+          },
+          "default": {},
+          "title": "Provenance",
+          "type": "object"
+        }
+      },
+      "required": [
+        "epss",
+        "kev",
+        "cvss",
+        "versions",
+        "advisory",
+        "exploits"
+      ],
+      "title": "Enrichment",
+      "type": "object"
+    },
+    "EpssData": {
+      "additionalProperties": false,
+      "description": "FIRST EPSS exploitation-probability data for one CVE.",
+      "properties": {
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "percentile": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Percentile",
+          "type": "number"
+        },
+        "date": {
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "score",
+        "percentile",
+        "date"
+      ],
+      "title": "EpssData",
+      "type": "object"
+    },
+    "ExploitData": {
+      "additionalProperties": false,
+      "description": "Public exploit presence indicators.",
+      "properties": {
+        "edb_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Edb Ids",
+          "type": "array"
+        },
+        "msf_modules": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Msf Modules",
+          "type": "array"
+        },
+        "nuclei_templates": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Nuclei Templates",
+          "type": "array"
+        }
+      },
+      "title": "ExploitData",
+      "type": "object"
+    },
+    "Finding": {
+      "additionalProperties": false,
+      "description": "Normalized unit of work produced by the ingest layer.\n\n``cve_id`` holds the canonical vulnerability ID: a CVE ID where one\nexists, else the native OSV/GHSA ID (SBOM path \u2014 alias resolution\nhappens in the OSV adapter). ``aliases`` records the other IDs the same\nvulnerability is known by, preserving the audit trail of that\nresolution (e.g. the GHSA ID that resolved to this CVE).\n\n``scanner_severity`` is the ingesting scanner's own severity label,\ncarried as informational metadata only \u2014 it never feeds the SSVC\nengine. ``locations`` lists the file paths a scanner reported for this\nfinding (several when layer dedup merged repeated matches).",
+      "properties": {
+        "cve_id": {
+          "title": "Cve Id",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/IngestSource"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PackageRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "asset_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Hint"
+        },
+        "aliases": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "scanner_severity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scanner Severity"
+        },
+        "locations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Locations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cve_id",
+        "source"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "GhsaData": {
+      "additionalProperties": false,
+      "description": "GitHub Security Advisory detail for one vulnerability.\n\n``severity`` is GitHub's label, informational only \u2014 it never feeds the\nSSVC engine. ``versions`` holds GHSA's own ranges verbatim; they are kept\nhere even when OSV's data fills the canonical ``Enrichment.versions``\n(keep-both policy, see pipeline module docstring).",
+      "properties": {
+        "ghsa_id": {
+          "title": "Ghsa Id",
+          "type": "string"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "versions": {
+          "$ref": "#/$defs/VersionData"
+        }
+      },
+      "required": [
+        "ghsa_id",
+        "severity",
+        "summary",
+        "versions"
+      ],
+      "title": "GhsaData",
+      "type": "object"
+    },
+    "IngestSource": {
+      "description": "How a finding entered the pipeline (SPEC.md \u00a74.1, v0.1 inputs).",
+      "enum": [
+        "cli",
+        "cyclonedx",
+        "grype"
+      ],
+      "title": "IngestSource",
+      "type": "string"
+    },
+    "KevData": {
+      "additionalProperties": false,
+      "description": "CISA Known Exploited Vulnerabilities catalog membership.",
+      "properties": {
+        "listed": {
+          "title": "Listed",
+          "type": "boolean"
+        },
+        "date_added": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date Added"
+        },
+        "ransomware": {
+          "default": false,
+          "title": "Ransomware",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "listed"
+      ],
+      "title": "KevData",
+      "type": "object"
+    },
+    "PackageRef": {
+      "additionalProperties": false,
+      "description": "A package identified by purl, present on SBOM/scanner ingest paths.",
+      "properties": {
+        "purl": {
+          "title": "Purl",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "purl"
+      ],
+      "title": "PackageRef",
+      "type": "object"
+    },
+    "RankedResult": {
+      "additionalProperties": false,
+      "description": "Finding + Enrichment + Verdict \u2014 the unit every formatter consumes (\u00a73.6).",
+      "properties": {
+        "finding": {
+          "$ref": "#/$defs/Finding"
+        },
+        "enrichment": {
+          "$ref": "#/$defs/Enrichment"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        }
+      },
+      "required": [
+        "finding",
+        "enrichment",
+        "verdict"
+      ],
+      "title": "RankedResult",
+      "type": "object"
+    },
+    "RunMetadata": {
+      "additionalProperties": false,
+      "description": "Run-level facts the pipeline emits alongside results (FRAMEWORK.md \u00a73.3).",
+      "properties": {
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "offline": {
+          "title": "Offline",
+          "type": "boolean"
+        },
+        "cache_hit_rate": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Cache Hit Rate",
+          "type": "object"
+        },
+        "degradations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Degradations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources",
+        "offline",
+        "cache_hit_rate"
+      ],
+      "title": "RunMetadata",
+      "type": "object"
+    },
+    "SourceMeta": {
+      "additionalProperties": false,
+      "description": "Provenance for one source's contribution to an enrichment.",
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "fetched_at": {
+          "format": "date-time",
+          "title": "Fetched At",
+          "type": "string"
+        },
+        "cache_hit": {
+          "title": "Cache Hit",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source",
+        "fetched_at",
+        "cache_hit"
+      ],
+      "title": "SourceMeta",
+      "type": "object"
+    },
+    "Unavailable": {
+      "additionalProperties": false,
+      "description": "Marker value for enrichment data that could not be fetched.",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/UnavailableReason"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "Unavailable",
+      "type": "object"
+    },
+    "UnavailableReason": {
+      "description": "Why an enrichment field could not be populated.",
+      "enum": [
+        "source_down",
+        "offline",
+        "not_found",
+        "rate_limited"
+      ],
+      "title": "UnavailableReason",
+      "type": "string"
+    },
+    "Verdict": {
+      "additionalProperties": false,
+      "description": "SSVC engine output: the decision plus the audit trail behind it.",
+      "properties": {
+        "decision": {
+          "$ref": "#/$defs/Decision"
+        },
+        "path": {
+          "$ref": "#/$defs/DecisionPath"
+        },
+        "tree_id": {
+          "title": "Tree Id",
+          "type": "string"
+        },
+        "inputs_degraded": {
+          "title": "Inputs Degraded",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "decision",
+        "path",
+        "tree_id",
+        "inputs_degraded"
+      ],
+      "title": "Verdict",
+      "type": "object"
+    },
+    "VersionData": {
+      "additionalProperties": false,
+      "description": "Affected / fixed version ranges (OSV/GHSA).",
+      "properties": {
+        "affected": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected",
+          "type": "array"
+        },
+        "fixed": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Fixed",
+          "type": "array"
+        }
+      },
+      "title": "VersionData",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level JSON document: schema version, run metadata, ranked results.",
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "run": {
+      "$ref": "#/$defs/RunMetadata"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/RankedResult"
+      },
+      "title": "Results",
+      "type": "array"
+    }
+  },
+  "required": [
+    "run",
+    "results"
+  ],
+  "title": "JsonReport",
+  "type": "object"
+}

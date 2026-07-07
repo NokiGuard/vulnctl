@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import pytest
 from rich.console import Console, RenderableType
 
 from vulnctl.models import (
@@ -13,6 +14,7 @@ from vulnctl.models import (
     DecisionPathStep,
     Enrichment,
     EpssData,
+    ExploitData,
     Finding,
     IngestSource,
     KevData,
@@ -44,6 +46,7 @@ def _result(
     cvss: CvssData | Unavailable = _DOWN,
     degraded: bool = False,
     package: PackageRef | None = None,
+    exploits: ExploitData | Unavailable = _NOT_IMPL,
 ) -> RankedResult:
     return RankedResult(
         finding=Finding(cve_id=cve_id, source=IngestSource.CLI, package=package),
@@ -53,7 +56,7 @@ def _result(
             cvss=cvss,
             versions=_NOT_IMPL,
             advisory=_NOT_IMPL,
-            exploits=_NOT_IMPL,
+            exploits=exploits,
             provenance={"test": _META},
         ),
         verdict=Verdict(
@@ -167,6 +170,44 @@ def test_package_column_only_on_package_bearing_runs() -> None:
     assert "pkg:npm/lodash@4.17.20" in text
     # The version is not appended twice when the purl already embeds it.
     assert "4.17.20@4.17.20" not in text
+
+
+@pytest.mark.parametrize(
+    ("decisions", "threshold", "expected"),
+    [
+        ([Decision.ACT], Decision.ACT, 2),
+        ([Decision.ATTEND], Decision.ACT, 0),  # below threshold
+        ([Decision.ATTEND], Decision.ATTEND, 2),
+        ([Decision.TRACK, Decision.ATTEND], Decision.ATTEND, 2),  # any one meeting it trips
+        ([Decision.TRACK, Decision.TRACK_STAR], Decision.ATTEND, 0),
+        ([Decision.TRACK], Decision.TRACK, 2),  # track threshold trips on anything
+        ([Decision.ACT], None, 0),  # no gate
+        ([], Decision.ACT, 0),  # no findings
+    ],
+)
+def test_gate_exit_code(
+    decisions: list[Decision], threshold: Decision | None, expected: int
+) -> None:
+    from vulnctl.output import gate_exit_code
+
+    rows = [_result(f"CVE-2020-{i:04d}", decision=d) for i, d in enumerate(decisions)]
+    assert gate_exit_code(rows, threshold) == expected
+
+
+def test_exploits_column_renders_counts_and_none() -> None:
+    rows = [
+        _result(
+            "CVE-2021-44228",
+            decision=Decision.ACT,
+            exploits=ExploitData(edb_ids=["1", "2"], msf_modules=["m"], nuclei_templates=[]),
+        ),
+        _result("CVE-2020-1111", decision=Decision.TRACK, exploits=ExploitData()),
+    ]
+    text = _render(build_table(rows, _METADATA))
+    assert "EDB·2" in text
+    assert "MSF·1" in text
+    assert "nuclei" not in text  # zero-count kinds are omitted
+    assert "none" in text  # empty ExploitData renders as an explicit 'none'
 
 
 def test_paths_render_every_step_with_sources() -> None:

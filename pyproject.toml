@@ -41,6 +41,7 @@ dev = [
     "mypy>=1.14",
     "pre-commit>=4.0",
     "pytest-cov>=6",
+    "jsonschema>=4.21",
 ]
 
 [build-system]

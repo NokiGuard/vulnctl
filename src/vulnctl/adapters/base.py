@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict
 from vulnctl.cache import Cache
 from vulnctl.models import (
     EpssData,
+    ExploitData,
     GhsaData,
     KevData,
     NvdData,
@@ -45,7 +46,7 @@ def body_too_large(response: httpx.Response) -> bool:
     return len(response.content) > MAX_RESPONSE_BYTES
 
 
-AdapterData = EpssData | GhsaData | KevData | NvdData | VersionData
+AdapterData = EpssData | ExploitData | GhsaData | KevData | NvdData | VersionData
 
 
 class SourceResult(BaseModel):

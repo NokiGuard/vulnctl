@@ -1,0 +1,59 @@
+# Weekly live-smoke: exercise every adapter against real upstream APIs to catch
+# schema drift before it silently degrades production runs. This is the ONLY
+# workflow that hits the network — PR/push CI stays fixture-only. On failure it
+# opens a tracking issue. Never triggered by pull_request.
+name: live-smoke
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write # open a tracking issue when an upstream source drifts/breaks
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Live adapter smoke (real APIs)
+        env:
+          VULNCTL_LIVE: "1"
+          # Optional secrets: raise NVD/GitHub rate limits. Anonymous also works.
+          VULNCTL_NVD_API_KEY: ${{ secrets.VULNCTL_NVD_API_KEY }}
+          VULNCTL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run pytest tests/live -v
+
+      - name: Open an issue on failure
+        if: failure()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `live-smoke failed — upstream drift or outage (${new Date().toISOString().slice(0, 10)})`,
+              body: [
+                `The weekly [live-smoke run](${run}) failed.`,
+                '',
+                'An adapter returned no data for a known-good CVE. Because every adapter',
+                'parses upstream responses through strict Pydantic models, this usually',
+                'means an upstream API changed its schema (the adapter degraded to',
+                '`Unavailable`) — or the source is temporarily down.',
+                '',
+                'Check the run logs to see which source failed, then update the adapter',
+                'and its recorded fixtures if the schema changed.',
+              ].join('\n'),
+              labels: ['live-smoke', 'upstream-drift'],
+            });

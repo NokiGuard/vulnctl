@@ -1,0 +1,48 @@
+# Demo: gate a pull request on vulnctl's SSVC verdicts and publish the SARIF
+# report to GitHub code scanning. Copy this into a downstream repo's
+# .github/workflows/ and adjust `path:` / `--context` as needed.
+#
+# Flow: Syft SBOM -> vulnctl SARIF (uploaded) -> vulnctl --fail-on gate.
+# All actions are pinned by full commit SHA (vulnctl security posture).
+# Note: vulnctl v0.1 accepts CycloneDX 1.4/1.5, so Syft is asked for @1.5.
+name: vulnctl gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read            # checkout
+  security-events: write    # upload SARIF to code scanning
+
+jobs:
+  vulnctl-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Generate CycloneDX SBOM (Syft)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: cyclonedx-json@1.5
+          output-file: sbom.cdx.json
+
+      - name: Install vulnctl
+        run: pipx install "git+https://github.com/NokiGuard/vulnctl.git"
+
+      - name: Enrich SBOM and write SARIF
+        run: vulnctl enrich --sbom sbom.cdx.json --format sarif > vulnctl.sarif
+
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@411c4c9a36b3fca4d674f06b6396b2c6d23522c6 # v3
+        with:
+          sarif_file: vulnctl.sarif
+          category: vulnctl
+
+      # Fails the job (exit 2) if any component has an ACT verdict. The SARIF
+      # is already uploaded above, so the Security tab is populated either way.
+      - name: Gate on ACT verdicts
+        run: vulnctl enrich --sbom sbom.cdx.json --fail-on act

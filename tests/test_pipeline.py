@@ -17,6 +17,7 @@ from vulnctl.ingest import IngestError
 from vulnctl.models import (
     CvssData,
     EpssData,
+    ExploitData,
     Finding,
     GhsaData,
     IngestSource,
@@ -81,10 +82,10 @@ async def test_three_cves_through_all_three_adapters(
     assert isinstance(log4shell.kev, KevData) and log4shell.kev.ransomware is True
     assert isinstance(log4shell.cvss, CvssData) and log4shell.cvss.severity == "CRITICAL"
     assert log4shell.cwes == ["CWE-20", "CWE-400", "CWE-502", "CWE-917"]
-    assert set(log4shell.provenance) == {"epss", "ghsa", "kev", "nvd", "osv"}
+    assert set(log4shell.provenance) == {"epss", "ghsa", "kev", "nvd", "osv", "exploits"}
     assert isinstance(log4shell.versions, VersionData)
-    # Sources without adapters yet are explicitly degraded, not silently empty.
-    assert isinstance(log4shell.exploits, Unavailable)
+    # Exploit index (bundled) knows Log4Shell — real ExploitData, not degraded.
+    assert isinstance(log4shell.exploits, ExploitData) and log4shell.exploits.msf_modules
 
     webp = results[1].enrichment
     assert isinstance(webp.kev, KevData) and webp.kev.listed and not webp.kev.ransomware
@@ -99,10 +100,11 @@ async def test_three_cves_through_all_three_adapters(
     assert isinstance(sendmail.versions, Unavailable)
     assert sendmail.versions.reason is UnavailableReason.NOT_FOUND
 
-    assert metadata.sources == ["epss", "ghsa", "kev", "nvd", "osv"]
+    assert metadata.sources == ["epss", "exploits", "ghsa", "kev", "nvd", "osv"]
     assert metadata.offline is False
     assert metadata.cache_hit_rate == {
         "epss": 0.0,
+        "exploits": 0.0,
         "ghsa": 0.0,
         "kev": 0.0,
         "nvd": 0.0,
@@ -119,7 +121,14 @@ async def test_second_run_hits_cache(
         await enrich_findings(findings, cache=cache, client=client)
         _, metadata = await enrich_findings(findings, cache=cache, client=client)
 
-    assert metadata.cache_hit_rate == {"epss": 1.0, "ghsa": 0.0, "kev": 1.0, "nvd": 1.0, "osv": 1.0}
+    assert metadata.cache_hit_rate == {
+        "epss": 1.0,
+        "exploits": 0.0,  # snapshot-only: never counts as a cache hit
+        "ghsa": 0.0,
+        "kev": 1.0,
+        "nvd": 1.0,
+        "osv": 1.0,
+    }
 
 
 async def test_adapter_exception_degrades_never_crashes(
@@ -169,7 +178,31 @@ async def test_offline_end_to_end_from_snapshots(cache: Cache, fixture_client: M
     assert enrichment.versions.reason is UnavailableReason.OFFLINE
     assert isinstance(enrichment.advisory, Unavailable)  # GHSA: cache-only, cold cache
     assert enrichment.advisory.reason is UnavailableReason.OFFLINE
+    # Exploit index is bundled, so it answers offline with real data.
+    assert isinstance(enrichment.exploits, ExploitData) and enrichment.exploits.edb_ids
     assert metadata.offline is True
+
+
+async def test_offline_poc_from_bundled_exploit_index(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    """CVE-2010-0017 is in the bundled exploit index but not KEV: offline, the
+    resolver derives exploitation=poc from real ExploitData end-to-end."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("offline run must never touch the network")
+
+    async with fixture_client(handler) as client:
+        results, _ = await enrich_findings(
+            [_finding("CVE-2010-0017")], cache=cache, client=client, offline=True
+        )
+        ranked = apply_tree(results, OrgContext(), load_bundled_tree())
+
+    enrichment = results[0].enrichment
+    assert isinstance(enrichment.kev, KevData) and enrichment.kev.listed is False
+    assert isinstance(enrichment.exploits, ExploitData) and enrichment.exploits.msf_modules
+    exploitation = ranked[0].verdict.path.steps[0]
+    assert (exploitation.value, exploitation.value_source) == ("poc", "exploits")
 
 
 def _sbom_router(load_fixture: LoadFixture) -> callable[[httpx.Request], httpx.Response]:

@@ -33,6 +33,8 @@ from vulnctl.adapters.base import SourceAdapter, SourceResult, all_adapters
 from vulnctl.adapters.osv import OsvAdapter
 from vulnctl.cache import Cache
 from vulnctl.context import OrgContext
+from vulnctl.ingest import IngestError
+from vulnctl.ingest.cve_list import parse_cve_ids
 from vulnctl.ingest.cyclonedx import parse_sbom, resolve_findings
 from vulnctl.ingest.grype import load_grype
 from vulnctl.models import (
@@ -40,6 +42,7 @@ from vulnctl.models import (
     EnrichedFinding,
     Enrichment,
     EpssData,
+    ExploitData,
     Finding,
     GhsaData,
     KevData,
@@ -63,6 +66,42 @@ def _default_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         timeout=httpx.Timeout(30.0), headers={"User-Agent": f"vulnctl/{__version__}"}
     )
+
+
+def resolve_inputs(
+    cve_ids: list[str] | None, sbom_path: Path | None, grype_source: str | None
+) -> list[Finding] | None:
+    """Validate exactly one input mode and parse CVE IDs (``None`` = SBOM/Grype).
+
+    Raises:
+        IngestError: if not exactly one input mode is given, or a CVE ID is
+            malformed — both are input errors the CLI maps to exit 1.
+    """
+    if sum([bool(cve_ids), sbom_path is not None, grype_source is not None]) != 1:
+        raise IngestError("provide CVE IDs, --sbom, or --grype (exactly one input)")
+    if cve_ids:
+        try:
+            return parse_cve_ids(cve_ids)
+        except ValueError as exc:
+            raise IngestError(str(exc)) from exc
+    return None
+
+
+async def run_enrichment(
+    *,
+    findings: list[Finding] | None,
+    sbom_path: Path | None,
+    grype_source: str | None,
+    cache: Cache,
+    offline: bool,
+) -> tuple[list[EnrichedFinding], RunMetadata]:
+    """Dispatch to the matching enrichment entry point for the chosen input mode."""
+    if findings is not None:
+        return await enrich_findings(findings, cache=cache, offline=offline)
+    if sbom_path is not None:
+        return await enrich_sbom(sbom_path, cache=cache, offline=offline)
+    assert grype_source is not None  # guaranteed by resolve_inputs
+    return await enrich_grype(grype_source, cache=cache, offline=offline)
 
 
 async def enrich_findings(
@@ -211,6 +250,7 @@ def _assemble(
     nvd = _result_for(by_source, "nvd", cve_id)
     osv = _result_for(by_source, "osv", cve_id)
     ghsa = _result_for(by_source, "ghsa", cve_id)
+    exploits = _result_for(by_source, "exploits", cve_id)
 
     if isinstance(nvd.data, NvdData):
         cvss: CvssData | Unavailable = nvd.data.cvss
@@ -230,13 +270,16 @@ def _assemble(
         cwes=cwes,
         versions=versions,
         advisory=advisory,
-        exploits=_NO_ADAPTER,  # exploit-presence adapter arrives in M5
+        exploits=(
+            exploits.data if isinstance(exploits.data, ExploitData | Unavailable) else _NO_ADAPTER
+        ),
         provenance={
             "epss": epss.meta,
             "kev": kev.meta,
             "nvd": nvd.meta,
             "osv": osv.meta,
             "ghsa": ghsa.meta,
+            "exploits": exploits.meta,
         },
     )
     return enrichment, conflict

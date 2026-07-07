@@ -14,9 +14,10 @@ from rich.table import Table
 from vulnctl.cache import Cache
 from vulnctl.context import ContextError, load_context
 from vulnctl.ingest import IngestError
-from vulnctl.ingest.cve_list import parse_cve_ids
-from vulnctl.output.table import build_paths, build_table
-from vulnctl.pipeline import apply_tree, enrich_findings, enrich_grype, enrich_sbom
+from vulnctl.models import Decision
+from vulnctl.output import gate_exit_code
+from vulnctl.output.render import OutputFormat, render_output
+from vulnctl.pipeline import apply_tree, resolve_inputs, run_enrichment
 from vulnctl.ssvc.engine import EvaluationError
 from vulnctl.ssvc.tree import TreeError, load_bundled_tree, load_tree
 
@@ -84,40 +85,51 @@ def enrich(
         Path | None,
         typer.Option("--tree", help="Decision-tree YAML (default: bundled cisa-deployer-v1)."),
     ] = None,
+    output_format: Annotated[
+        OutputFormat,
+        typer.Option("--format", "-f", help="Output format."),
+    ] = OutputFormat.TABLE,
+    fail_on: Annotated[
+        Decision | None,
+        typer.Option("--fail-on", help="Exit 2 if any finding's decision meets/exceeds this."),
+    ] = None,
     show_path: Annotated[
         bool,
-        typer.Option("--show-path", help="Print each finding's full decision path."),
+        typer.Option("--show-path", help="Print each finding's decision path (table format)."),
     ] = False,
 ) -> None:
-    """Enrich CVE IDs, an SBOM, or a Grype scan with intel and rank with SSVC verdicts."""
-    given_ids = cve_ids or []
-    if sum([bool(given_ids), sbom_path is not None, grype_source is not None]) != 1:
-        raise typer.BadParameter("provide CVE IDs, --sbom, or --grype (exactly one input mode)")
-    findings = None
-    if given_ids:
-        try:
-            findings = parse_cve_ids(given_ids)
-        except ValueError as exc:
-            raise typer.BadParameter(str(exc)) from exc
+    """Enrich CVE IDs, an SBOM, or a Grype scan with intel and rank with SSVC verdicts.
+
+    Exit codes: 0 success, 1 input/config error, 2 --fail-on threshold met.
+    """
     try:
+        findings = resolve_inputs(cve_ids, sbom_path, grype_source)
         org_context = load_context(context_path)
         tree = load_tree(tree_path) if tree_path is not None else load_bundled_tree()
         with Cache() as cache:
-            if findings is not None:
-                run = enrich_findings(findings, cache=cache, offline=offline)
-            elif sbom_path is not None:
-                run = enrich_sbom(sbom_path, cache=cache, offline=offline)
-            else:
-                assert grype_source is not None  # guaranteed by the input-mode check
-                run = enrich_grype(grype_source, cache=cache, offline=offline)
-            results, metadata = asyncio.run(run)
+            results, metadata = asyncio.run(
+                run_enrichment(
+                    findings=findings,
+                    sbom_path=sbom_path,
+                    grype_source=grype_source,
+                    cache=cache,
+                    offline=offline,
+                )
+            )
         ranked = apply_tree(results, org_context, tree)
     except (IngestError, ContextError, TreeError, EvaluationError) as exc:
         console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(1) from exc
-    console.print(build_table(ranked, metadata))
-    if show_path:
-        console.print(build_paths(ranked))
+    artifact_uri = str(sbom_path) if sbom_path is not None else grype_source
+    render_output(
+        ranked,
+        metadata,
+        fmt=output_format,
+        show_path=show_path,
+        console=console,
+        artifact_uri=artifact_uri if artifact_uri != "-" else None,
+    )
+    raise typer.Exit(gate_exit_code(ranked, fail_on))
 
 
 @cache_app.command()
