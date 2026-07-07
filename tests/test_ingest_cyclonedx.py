@@ -61,6 +61,13 @@ def test_parse_syft_14_sbom() -> None:
     assert warnings == ["sbom: skipped 1 component(s) without a purl"]
 
 
+def test_parse_syft_16_sbom() -> None:
+    # Modern Syft defaults to CycloneDX 1.6; it must parse like 1.4/1.5.
+    packages, warnings = parse_sbom(FIXTURES_DIR / "sbom" / "npm-app-1.6.cdx.json")
+    assert PackageRef(purl="pkg:npm/lodash@4.17.20", version="4.17.20") in packages
+    assert warnings == ["sbom: skipped 1 component(s) without a purl"]
+
+
 # --- parse_sbom: hard errors (fail loud on input) --------------------------------
 
 
@@ -70,7 +77,8 @@ def test_parse_syft_14_sbom() -> None:
         ("{not json", "not valid JSON"),
         ('["a", "list"]', "root must be a JSON object"),
         (_minimal(bomFormat="SPDX"), "not a CycloneDX SBOM"),
-        (_minimal(specVersion="1.6"), "unsupported specVersion '1.6'"),
+        (_minimal(specVersion="1.3"), "unsupported specVersion '1.3'"),  # too old
+        (_minimal(specVersion="2.0"), "unsupported specVersion '2.0'"),  # doesn't exist yet
         (_minimal(components="lots"), "'components' must be a list"),
         (_minimal(components=["not-an-object"]), r"components\[0\] must be an object"),
         (_minimal(components=[{"purl": 42}]), r"components\[0\].purl must be a string"),

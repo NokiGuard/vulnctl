@@ -1,4 +1,4 @@
-"""CycloneDX 1.4/1.5 JSON SBOM ingestion (FRAMEWORK.md §3.1).
+"""CycloneDX 1.4/1.5/1.6 JSON SBOM ingestion (FRAMEWORK.md §3.1).
 
 Parsing is pure and hard-fails on malformed input with a message naming what
 is wrong and where (CLAUDE.md rule 3). Component→CVE resolution flows through
@@ -21,7 +21,7 @@ from vulnctl.ingest import IngestError
 from vulnctl.models import Finding, IngestSource, PackageRef
 
 MAX_SBOM_FILE_BYTES = 64 * 1024 * 1024
-SUPPORTED_SPEC_VERSIONS = ("1.4", "1.5")
+SUPPORTED_SPEC_VERSIONS = ("1.4", "1.5", "1.6")
 
 
 def parse_sbom(path: Path) -> tuple[list[PackageRef], list[str]]:

@@ -4,7 +4,7 @@
 #
 # Flow: Syft SBOM -> vulnctl SARIF (uploaded) -> vulnctl --fail-on gate.
 # All actions are pinned by full commit SHA (vulnctl security posture).
-# Note: vulnctl v0.1 accepts CycloneDX 1.4/1.5, so Syft is asked for @1.5.
+# vulnctl accepts CycloneDX 1.4/1.5/1.6, matching Syft's default output.
 name: vulnctl gate
 
 on:
@@ -27,7 +27,7 @@ jobs:
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
-          format: cyclonedx-json@1.5
+          format: cyclonedx-json
           output-file: sbom.cdx.json
 
       - name: Install vulnctl
