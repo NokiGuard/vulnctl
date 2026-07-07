@@ -1,0 +1,232 @@
+name: release
+
+# Cut a signed release of vulnctl.
+#
+# Pipeline (in order, each stage gates the next):
+#   build   → build sdist+wheel (uv), install the wheel into a clean env,
+#             SBOM that runtime closure (Syft, CycloneDX JSON), scan it (Grype),
+#             and gate: (1) no critical-with-fix vuln, (2) dogfood vulnctl's own
+#             --fail-on act against the Grype report.
+#   sign    → cosign keyless (OIDC) signatures for the wheel, sdist, and SBOM.
+#   publish → PyPI via trusted publishing (OIDC, no stored token).
+#   release → GitHub Release with wheel, sdist, SBOM, and signatures attached.
+#
+# Triggers:
+#   - push of a `v*` tag → the full pipeline, including publish + GitHub Release.
+#   - workflow_dispatch  → DRY RUN: build, SBOM, scan, gates, and signing all
+#     run (so the release path is fully exercised), but publish + release are
+#     skipped. Every produced artifact is downloadable from the run.
+#
+# Security posture: every action is pinned to a full commit SHA; permissions are
+# least-privilege per job; `id-token: write` (OIDC) is granted only to the jobs
+# that actually sign or publish.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Deny everything by default; each job opts in to exactly what it needs.
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, SBOM, scan & gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Verify tag matches package version
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(grep -m1 -E '^version\s*=' pyproject.toml | sed -E 's/.*=\s*"([^"]+)".*/\1/')"
+          echo "tag=$tag  pyproject=$pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match pyproject version $pkg — bump pyproject first"
+            exit 1
+          fi
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Resolve built wheel path
+        run: echo "WHEEL=$(ls dist/*.whl)" >> "$GITHUB_ENV"
+
+      - name: Install the release artifact into a clean environment
+        # Installs exactly what a `pipx install vulnctl` user receives, so the
+        # SBOM and scan below describe the real shipped runtime closure.
+        run: |
+          set -euo pipefail
+          uv venv .relenv
+          uv pip install --python .relenv "$WHEEL"
+
+      - name: Generate CycloneDX SBOM of the runtime closure (Syft)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .relenv
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+
+      - name: Install Grype
+        id: grype
+        uses: anchore/scan-action/download-grype@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+
+      - name: Scan the SBOM (Grype → JSON)
+        run: ${{ steps.grype.outputs.cmd }} sbom:sbom.cdx.json -o json=grype.json
+
+      - name: "Gate 1 — no critical vulnerability that already has a fix"
+        run: |
+          set -euo pipefail
+          count="$(jq '[.matches[]
+            | select(.vulnerability.severity == "Critical"
+                     and .vulnerability.fix.state == "fixed")] | length' grype.json)"
+          if [ "$count" -gt 0 ]; then
+            echo "::error::$count critical vulnerability(ies) with an available fix — release blocked"
+            jq -r '.matches[]
+              | select(.vulnerability.severity == "Critical" and .vulnerability.fix.state == "fixed")
+              | "  - \(.artifact.name) \(.artifact.version): \(.vulnerability.id) → fix \(.vulnerability.fix.versions | join(", "))"' grype.json
+            exit 1
+          fi
+          echo "OK: no critical-with-fix findings."
+
+      - name: "Gate 2 — dogfood vulnctl on its own Grype report (fail on ACT)"
+        env:
+          # Optional: raises NVD rate limits. vulnctl fails open if unset/down.
+          VULNCTL_NVD_API_KEY: ${{ secrets.VULNCTL_NVD_API_KEY }}
+        run: |
+          # Run the exact wheel we're about to ship against its own scan. A
+          # KEV-listed dependency resolves to exploitation=active → ACT → exit 2.
+          ./.relenv/bin/vulnctl enrich --grype grype.json --fail-on act
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+      - name: Upload SBOM and scan report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports
+          path: |
+            sbom.cdx.json
+            grype.json
+          if-no-files-found: error
+
+  sign:
+    name: Sign artifacts (cosign keyless)
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      id-token: write # OIDC identity for keyless signing (Fulcio); no private key
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: dist
+          path: dist
+
+      - name: Download SBOM
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: reports
+          path: .
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign wheel, sdist, and SBOM (keyless)
+        run: |
+          set -euo pipefail
+          mkdir -p sigs
+          for f in dist/*.whl dist/*.tar.gz sbom.cdx.json; do
+            base="$(basename "$f")"
+            echo "signing $f"
+            cosign sign-blob --yes \
+              --output-signature "sigs/$base.sig" \
+              --output-certificate "sigs/$base.pem" \
+              "$f"
+          done
+
+      - name: Upload signatures
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signatures
+          path: sigs/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI (trusted publishing)
+    runs-on: ubuntu-latest
+    needs: [build, sign]
+    if: github.event_name == 'push'
+    environment:
+      name: pypi
+      url: https://pypi.org/p/vulnctl
+    permissions:
+      id-token: write # OIDC for PyPI trusted publishing — no stored API token
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to PyPI
+        # Uploads only dist/*.whl and dist/*.tar.gz (signatures/SBOM live in
+        # separate artifacts). Generates PEP 740 attestations via the same OIDC
+        # identity by default.
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build, sign, publish]
+    if: github.event_name == 'push'
+    permissions:
+      contents: write # create the release and upload assets
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: dist
+          path: dist
+
+      - name: Download SBOM and scan report
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: reports
+          path: .
+
+      - name: Download signatures
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: signatures
+          path: signatures
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@2bb465e97f322d3cb2a965294d483e0d26a67aa9 # v3.0.1
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            sbom.cdx.json
+            signatures/*

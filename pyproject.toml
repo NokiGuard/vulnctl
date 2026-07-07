@@ -1,6 +1,6 @@
 [project]
 name = "vulnctl"
-version = "0.0.1"
+version = "0.1.0"
 description = "CLI-first vulnerability prioritization: auditable SSVC verdicts from fused threat intelligence"
 readme = "README.md"
 license = "Apache-2.0"
@@ -9,7 +9,7 @@ authors = [{ name = "Brian Truong" }]
 requires-python = ">=3.11"
 keywords = ["vulnerability", "cve", "ssvc", "epss", "kev", "prioritization", "security"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Information Technology",
     "Operating System :: POSIX :: Linux",
