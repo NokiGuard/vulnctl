@@ -15,7 +15,19 @@ import pytest
 from conftest import FIXTURES_DIR, MakeClient
 from vulnctl.cache import Cache
 from vulnctl.context import OrgContext
-from vulnctl.models import Finding, IngestSource
+from vulnctl.models import (
+    Decision,
+    DecisionPath,
+    Enrichment,
+    Finding,
+    IngestSource,
+    PackageRef,
+    RankedResult,
+    RunMetadata,
+    Unavailable,
+    UnavailableReason,
+    Verdict,
+)
 from vulnctl.output.markdown import render_markdown
 from vulnctl.pipeline import apply_tree, enrich_findings
 from vulnctl.ssvc.tree import load_bundled_tree
@@ -44,6 +56,32 @@ async def _offline_md(cache: Cache, fixture_client: MakeClient) -> str:
 
 async def test_markdown_matches_golden(cache: Cache, fixture_client: MakeClient) -> None:
     assert await _offline_md(cache, fixture_client) == GOLDEN.read_text()
+
+
+def test_untrusted_strings_cannot_splice_markdown_into_the_report() -> None:
+    # IDs and purls arrive verbatim from scanner files; a hostile value must
+    # not break table rows, close code spans, inject headings, or smuggle
+    # raw HTML into a rendered report.
+    na = Unavailable(reason=UnavailableReason.OFFLINE)
+    hostile = RankedResult(
+        finding=Finding(
+            cve_id="CVE-2020-0001`<img src=x>`\n# fake heading",
+            source=IngestSource.GRYPE,
+            package=PackageRef(purl="pkg:npm/evil|Act|9.9"),
+        ),
+        enrichment=Enrichment(epss=na, kev=na, cvss=na, versions=na, advisory=na, exploits=na),
+        verdict=Verdict(
+            decision=Decision.ACT,
+            path=DecisionPath(steps=[]),
+            tree_id="toy-v1",
+            inputs_degraded=False,
+        ),
+    )
+    metadata = RunMetadata(sources=["kev"], offline=True, cache_hit_rate={"kev": 0.0})
+    report = render_markdown([hostile], metadata)
+    assert "\n# fake heading" not in report  # newlines collapsed: no injected headings
+    assert "pkg:npm/evil\\|Act\\|9.9" in report  # pipes escaped: table cells hold
+    assert "`<img" not in report and "<img" not in report  # code spans + HTML neutralized
 
 
 async def test_markdown_structure(cache: Cache, fixture_client: MakeClient) -> None:

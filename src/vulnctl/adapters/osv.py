@@ -63,6 +63,12 @@ _CONCURRENCY = 8  # parallel detail fetches
 _CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
 _RANGE_TYPES = frozenset({"SEMVER", "ECOSYSTEM"})
 
+#: IDs come from scanner files and querybatch responses, and are embedded in
+#: the request path — validate before building the URL so a hostile input
+#: cannot steer the request at other api.osv.dev endpoints. Covers every
+#: published OSV ID scheme (CVE-, GHSA-, PYSEC-, RLSA-2021:1234, …).
+_OSV_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*")
+
 
 class ResolvedVuln(BaseModel):
     """One vulnerability discovered for a package, alias-resolved."""
@@ -270,6 +276,10 @@ class OsvAdapter(SourceAdapter):
         return SourceResult(data=data, meta=self._meta(datetime.now(UTC), cache_hit=False))
 
     async def _get_record(self, vuln_id: str) -> dict[str, Any] | Unavailable:
+        if not _OSV_ID_RE.fullmatch(vuln_id):
+            return Unavailable(
+                reason=UnavailableReason.NOT_FOUND, detail="not a valid OSV vulnerability ID"
+            )
         try:
             response = await self._client.get(f"{API_URL}/vulns/{vuln_id}")
         except httpx.HTTPError as exc:

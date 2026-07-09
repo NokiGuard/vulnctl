@@ -5,6 +5,12 @@ then a top-10 table, then a per-finding appendix carrying the full decision
 path for anyone who needs to audit a verdict. No timestamps or provenance
 noise: the report is written to be read by a person, and to be diffable/golden
 so tests can pin it to bundled-snapshot data.
+
+Strings that originate outside vulnctl — vulnerability IDs and purls from
+scanner/SBOM files — pass through :func:`_plain` so a hostile input file
+cannot break table rows, close code spans, or splice its own Markdown into
+the report. Legitimate IDs and purls never contain the neutralized
+characters, so well-formed input renders unchanged.
 """
 
 from __future__ import annotations
@@ -29,6 +35,12 @@ _DECISION_LABEL = {
     Decision.TRACK: "Track",
 }
 _TOP_N = 10
+
+
+def _plain(text: str) -> str:
+    """Neutralize Markdown/HTML-structural characters in an untrusted string."""
+    collapsed = " ".join(text.split())  # newlines would break table rows / headings
+    return collapsed.replace("|", "\\|").replace("`", "'").replace("<", "&lt;")
 
 
 def _na(value: Unavailable) -> str:
@@ -64,8 +76,8 @@ def _package(package: PackageRef | None) -> str:
     if package is None:
         return "—"
     if package.version and not package.purl.endswith(f"@{package.version}"):
-        return f"{package.purl}@{package.version}"
-    return package.purl
+        return _plain(f"{package.purl}@{package.version}")
+    return _plain(package.purl)
 
 
 def _summary(ranked: list[RankedResult], metadata: RunMetadata) -> list[str]:
@@ -115,7 +127,7 @@ def _highlights(ranked: list[RankedResult]) -> list[str]:
         if isinstance(epss, EpssData):
             flags.append(f"EPSS {epss.score:.3f}")
         where = f" — {_package(result.finding.package)}" if result.finding.package else ""
-        lines.append(f"- **{result.finding.cve_id}** — {', '.join(flags)}{where}")
+        lines.append(f"- **{_plain(result.finding.cve_id)}** — {', '.join(flags)}{where}")
     return lines
 
 
@@ -129,7 +141,7 @@ def _table(ranked: list[RankedResult]) -> list[str]:
         e = result.enrichment
         row = [
             str(i),
-            result.finding.cve_id,
+            _plain(result.finding.cve_id),
             _DECISION_LABEL[result.verdict.decision],
             _cvss(e.cvss),
             _epss(e.epss),
@@ -148,7 +160,7 @@ def _appendix(ranked: list[RankedResult]) -> list[str]:
         verdict = result.verdict
         degraded = "  _(degraded: defaults applied)_" if verdict.inputs_degraded else ""
         lines.append(
-            f"### {result.finding.cve_id} → {_DECISION_LABEL[verdict.decision]}"
+            f"### {_plain(result.finding.cve_id)} → {_DECISION_LABEL[verdict.decision]}"
             f"  (tree `{verdict.tree_id}`){degraded}"
         )
         if result.finding.package is not None:

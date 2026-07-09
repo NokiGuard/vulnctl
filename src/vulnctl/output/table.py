@@ -5,11 +5,17 @@ dim ``n/a (reason)`` cell, never as a blank. Sort per FRAMEWORK.md §3.6:
 decision severity desc → EPSS desc → CVSS desc; unavailable scores sort
 below real ones within a tie. ``build_paths`` renders each finding's full
 decision path (``--show-path``).
+
+Strings that originate outside vulnctl — vulnerability IDs and purls from
+scanner/SBOM files, severity labels from NVD — are rich-markup-escaped
+before rendering: a hostile input file must not be able to restyle or
+visually camouflage a row (e.g. dim an ACT verdict).
 """
 
 from __future__ import annotations
 
 from rich.console import Group, RenderableType
+from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
 
@@ -54,7 +60,7 @@ def _cvss_cell(cvss: CvssData | Unavailable) -> str:
     if isinstance(cvss, Unavailable):
         return _na(cvss)
     style = _SEVERITY_STYLE.get(cvss.severity.upper(), "default")
-    return f"{cvss.base_score:.1f} [{style}]{cvss.severity}[/{style}]"
+    return f"{cvss.base_score:.1f} [{style}]{escape(cvss.severity)}[/{style}]"
 
 
 def _epss_cell(epss: EpssData | Unavailable) -> str:
@@ -67,8 +73,8 @@ def _package_cell(package: PackageRef | None) -> str:
     if package is None:
         return "[dim]—[/dim]"
     if package.version and not package.purl.endswith(f"@{package.version}"):
-        return f"{package.purl}@{package.version}"
-    return package.purl
+        return escape(f"{package.purl}@{package.version}")
+    return escape(package.purl)
 
 
 def _exploits_cell(exploits: ExploitData | Unavailable) -> str:
@@ -127,7 +133,7 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
     for result in sorted(results, key=result_sort_key):
         enrichment = result.enrichment
         row = [
-            result.finding.cve_id,
+            escape(result.finding.cve_id),
             _decision_cell(result.verdict.decision),
             _cvss_cell(enrichment.cvss),
             _epss_cell(enrichment.epss),

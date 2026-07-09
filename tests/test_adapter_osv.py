@@ -88,6 +88,26 @@ async def test_fetch_returns_version_ranges(
     assert "pkg:npm/lodash 4.17.21" in data.fixed
 
 
+async def test_fetch_rejects_malformed_ids_without_a_request(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    # IDs from scanner files are embedded in the request path; anything that
+    # could steer the URL (slashes, dot segments, spaces) must never reach
+    # the network — it degrades to not_found instead.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("malformed IDs must not produce a request")
+
+    malformed = ["../../evil", "x/y", "CVE 2021", ""]
+    async with fixture_client(handler) as client:
+        adapter = OsvAdapter(client, cache)
+        results = await adapter.fetch(malformed)
+
+    for vuln_id in malformed:
+        data = results[vuln_id].data
+        assert isinstance(data, Unavailable)
+        assert data.reason is UnavailableReason.NOT_FOUND
+
+
 async def test_fetch_cve_native_record_with_only_git_ranges_is_empty_not_unavailable(
     cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
 ) -> None:

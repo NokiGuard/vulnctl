@@ -210,6 +210,22 @@ def test_exploits_column_renders_counts_and_none() -> None:
     assert "none" in text  # empty ExploitData renders as an explicit 'none'
 
 
+def test_untrusted_strings_render_literally_not_as_markup() -> None:
+    # IDs, purls, and severity labels arrive from scanner files and NVD; a
+    # hostile value must not restyle the table (e.g. dim an ACT verdict or
+    # hide a cell) — rich markup in them has to survive as literal text.
+    hostile = _result(
+        "[green]CVE-2020-0001[/green]",
+        decision=Decision.ACT,
+        cvss=CvssData(vector="CVSS:3.1/AV:N", base_score=9.8, severity="[dim]HIGH[/dim]"),
+        package=PackageRef(purl="pkg:npm/[bold red on white]evil[/]"),
+    )
+    text = _render(build_table([hostile], _METADATA))
+    assert "[green]CVE-2020-0001[/green]" in text
+    assert "[dim]HIGH[/dim]" in text
+    assert "pkg:npm/[bold red on white]evil[/]" in text
+
+
 def test_paths_render_every_step_with_sources() -> None:
     rows = [
         _result("CVE-2020-2222", decision=Decision.ACT, degraded=True),
