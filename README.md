@@ -110,6 +110,7 @@ with CISA's Track/Track\*/Attend/Act labels). See
 
 | Doc | What's in it |
 |---|---|
+| [docs/output.md](docs/output.md) | Reading the output: what Track/Track\*/Attend/Act mean, the decision path, and every enrichment column |
 | [docs/context.md](docs/context.md) | Every `context.yaml` field, its values, and how each maps to an SSVC decision point |
 | [docs/trees.md](docs/trees.md) | The YAML decision-tree format and how to author/validate a custom tree |
 | [docs/schema.md](docs/schema.md) | The `--format json` output schema (machine-readable [`schema.json`](docs/schema.json)) |
