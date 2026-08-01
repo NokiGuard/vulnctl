@@ -9,12 +9,21 @@ from __future__ import annotations
 
 import re
 
-from vulnctl.models import CvssData, Decision, EpssData, PackageRef, RankedResult, VersionData
+from vulnctl.models import (
+    CvssData,
+    Decision,
+    EpssData,
+    KevData,
+    PackageRef,
+    RankedResult,
+    VersionData,
+)
 
 __all__ = [
     "FIX_DISPLAY_CAP",
     "degradation_groups",
     "display_fixes",
+    "filter_results",
     "gate_exit_code",
     "result_sort_key",
     "short_purl",
@@ -72,6 +81,31 @@ def display_fixes(result: RankedResult) -> list[str]:
         if own:
             entries = own
     return list(dict.fromkeys(entries))
+
+
+def filter_results(
+    results: list[RankedResult],
+    *,
+    min_decision: Decision | None = None,
+    only_kev: bool = False,
+    limit: int | None = None,
+) -> list[RankedResult]:
+    """Display filter shared by every output format: rank, threshold, cap.
+
+    This shapes *output only* — ``--fail-on`` gating and the summary line's
+    decision counts always see the unfiltered results, so filtering can never
+    silently hide that an Act exists.
+    """
+    ranked = sorted(results, key=result_sort_key)
+    if min_decision is not None:
+        ranked = [r for r in ranked if r.verdict.decision.rank >= min_decision.rank]
+    if only_kev:
+        ranked = [
+            r for r in ranked if isinstance(r.enrichment.kev, KevData) and r.enrichment.kev.listed
+        ]
+    if limit is not None:
+        ranked = ranked[:limit]
+    return ranked
 
 
 def degradation_groups(degradations: list[str]) -> tuple[dict[tuple[str, str], int], list[str]]:

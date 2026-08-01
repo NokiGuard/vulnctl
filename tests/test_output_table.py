@@ -28,6 +28,7 @@ from vulnctl.models import (
     Verdict,
     VersionData,
 )
+from vulnctl.output import result_sort_key
 from vulnctl.output.table import build_paths, build_summary, build_table
 
 _META = SourceMeta(source="test", fetched_at=datetime(2026, 7, 4, tzinfo=UTC), cache_hit=False)
@@ -365,3 +366,51 @@ def test_paths_render_every_step_with_sources() -> None:
     assert "[default]" in text
     assert "[degraded: defaults applied]" in text
     assert "(tree toy-v1)" in text
+
+
+def test_filter_results_threshold_kev_and_limit() -> None:
+    from vulnctl.output import filter_results
+
+    rows = [
+        _result("CVE-2020-1111", decision=Decision.TRACK),
+        _result("CVE-2020-2222", decision=Decision.ACT, kev=KevData(listed=True)),
+        _result("CVE-2020-3333", decision=Decision.ATTEND, epss=_epss(0.9)),
+        _result("CVE-2020-4444", decision=Decision.ATTEND, epss=_epss(0.5)),
+    ]
+    thresholded = filter_results(rows, min_decision=Decision.ATTEND)
+    assert [r.finding.cve_id for r in thresholded] == [
+        "CVE-2020-2222",  # act first: filtering ranks before it cuts
+        "CVE-2020-3333",
+        "CVE-2020-4444",
+    ]
+    assert [r.finding.cve_id for r in filter_results(rows, only_kev=True)] == ["CVE-2020-2222"]
+    assert [r.finding.cve_id for r in filter_results(rows, limit=2)] == [
+        "CVE-2020-2222",
+        "CVE-2020-3333",
+    ]
+    assert filter_results(rows) == sorted(rows, key=result_sort_key)  # no filters: rank only
+
+
+def test_summary_reports_hidden_rows_but_counts_everything() -> None:
+    rows = [
+        _result("CVE-2020-1111", decision=Decision.ACT),
+        _result("CVE-2020-2222", decision=Decision.TRACK),
+    ]
+    text = _render(build_summary(rows, shown=1))
+    assert "2 finding(s) (showing 1)" in text
+    assert "1 ACT" in text  # counts stay unfiltered — a hidden Act is still visible
+    assert "1 TRACK" in text
+
+    unfiltered = _render(build_summary(rows, shown=2))
+    assert "(showing" not in unfiltered  # no noise when nothing is hidden
+
+
+def test_table_breaks_into_sections_per_decision() -> None:
+    same = [
+        _result("CVE-2020-1111", decision=Decision.ATTEND, epss=_epss(0.9)),
+        _result("CVE-2020-2222", decision=Decision.ATTEND, epss=_epss(0.5)),
+    ]
+    assert "├" not in _render(build_table(same, _METADATA))  # one tier: no separator
+
+    mixed = [*same, _result("CVE-2020-3333", decision=Decision.TRACK)]
+    assert "├" in _render(build_table(mixed, _METADATA))  # tier change draws a rule

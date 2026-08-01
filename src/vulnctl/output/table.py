@@ -155,11 +155,18 @@ def _degraded_part(degradations: list[str]) -> str:
     return f"degraded: {', '.join(shown)}"
 
 
-def build_summary(results: list[RankedResult]) -> Text:
+def build_summary(results: list[RankedResult], *, shown: int | None = None) -> Text:
     """One-line verdict rollup — the run's headline, printed last so it lands
-    next to the prompt: counts per decision (zeros omitted) plus KEV exposure."""
+    next to the prompt: counts per decision (zeros omitted) plus KEV exposure.
+
+    Counts always cover the *unfiltered* results; ``shown`` (when it differs)
+    marks how many rows the display filters let through — a hidden Act must
+    still appear in this line.
+    """
     counts = Counter(result.verdict.decision for result in results)
     line = Text(f"{len(results)} finding(s)")
+    if shown is not None and shown != len(results):
+        line.append(f" (showing {shown})", style="dim")
     for decision in (Decision.ACT, Decision.ATTEND, Decision.TRACK_STAR, Decision.TRACK):
         if counts[decision]:
             line.append(" · ")
@@ -201,7 +208,11 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
     if with_summaries:
         table.add_column("Summary", max_width=48)
 
+    previous: Decision | None = None
     for result in sorted(results, key=result_sort_key):
+        if previous is not None and result.verdict.decision is not previous:
+            table.add_section()  # visual break between decision tiers
+        previous = result.verdict.decision
         enrichment = result.enrichment
         row = [
             escape(result.finding.cve_id),

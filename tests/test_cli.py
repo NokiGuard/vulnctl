@@ -214,6 +214,52 @@ def test_input_error_beats_gate_exit_code() -> None:
     assert result.exit_code == 1
 
 
+def test_min_decision_filters_display_but_not_the_gate() -> None:
+    # CVE-2021-44228 → ACT, CVE-2010-0017 → ATTEND on the offline snapshots.
+    result = runner.invoke(
+        app,
+        ["enrich", "--offline", "--min-decision", "act", "CVE-2021-44228", "CVE-2010-0017"],
+    )
+    assert result.exit_code == 0
+    assert "CVE-2021-44228" in result.output
+    assert result.output.count("CVE-2010-0017") == 0  # filtered from display
+    assert "2 finding(s) (showing 1)" in result.output  # ...but never from the rollup
+
+    gated = runner.invoke(
+        app,
+        [
+            "enrich",
+            "--offline",
+            "--min-decision",
+            "act",
+            "--fail-on",
+            "attend",
+            "CVE-2010-0017",
+        ],
+    )
+    assert gated.exit_code == 2  # the hidden ATTEND still trips the gate
+    assert "1 finding(s) (showing 0)" in gated.output
+
+
+def test_limit_caps_rows_highest_priority_first() -> None:
+    result = runner.invoke(
+        app, ["enrich", "--offline", "--limit", "1", "CVE-2010-0017", "CVE-2021-44228"]
+    )
+    assert result.exit_code == 0
+    assert "CVE-2021-44228" in result.output  # ACT outranks ATTEND
+    assert "CVE-2010-0017" not in result.output
+    assert "(showing 1)" in result.output
+
+
+def test_only_kev_filters_to_listed_findings() -> None:
+    result = runner.invoke(
+        app, ["enrich", "--offline", "--only-kev", "CVE-2021-44228", "CVE-2010-0017"]
+    )
+    assert result.exit_code == 0
+    assert "CVE-2021-44228" in result.output  # KEV-listed
+    assert "CVE-2010-0017" not in result.output  # exploit-only, not in KEV
+
+
 def test_completion_options_present() -> None:
     # Typer's completion must stay enabled — it is the documented way to get
     # tab completion for flags and enum values (docs/cli.md).

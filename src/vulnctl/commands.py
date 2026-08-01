@@ -73,6 +73,22 @@ def enrich(
         bool,
         typer.Option("--show-path", help="Print each finding's decision path (table format)."),
     ] = False,
+    min_decision: Annotated[
+        Decision | None,
+        typer.Option(
+            "--min-decision",
+            help="Show only findings at or above this decision (display filter; "
+            "--fail-on still evaluates every finding).",
+        ),
+    ] = None,
+    only_kev: Annotated[
+        bool,
+        typer.Option("--only-kev", help="Show only KEV-listed findings (display filter)."),
+    ] = False,
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", min=1, help="Show at most N findings, highest priority first."),
+    ] = None,
 ) -> None:
     """Enrich CVE/GHSA IDs, an SBOM, or a Grype scan with intel and rank with SSVC verdicts.
 
@@ -104,5 +120,8 @@ def enrich(
         show_path=show_path,
         console=console,
         artifact_uri=artifact_uri if artifact_uri != "-" else None,
+        min_decision=min_decision,
+        only_kev=only_kev,
+        limit=limit,
     )
-    raise typer.Exit(gate_exit_code(ranked, fail_on))
+    raise typer.Exit(gate_exit_code(ranked, fail_on))  # gate sees the unfiltered set
