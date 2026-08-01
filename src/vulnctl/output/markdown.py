@@ -20,13 +20,14 @@ from vulnctl.models import (
     Decision,
     EpssData,
     ExploitData,
+    GhsaData,
     KevData,
     PackageRef,
     RankedResult,
     RunMetadata,
     Unavailable,
 )
-from vulnctl.output import result_sort_key
+from vulnctl.output import FIX_DISPLAY_CAP, display_fixes, result_sort_key, short_purl
 
 _DECISION_LABEL = {
     Decision.ACT: "Act",
@@ -75,9 +76,21 @@ def _exploits(exploits: ExploitData | Unavailable) -> str:
 def _package(package: PackageRef | None) -> str:
     if package is None:
         return "—"
-    if package.version and not package.purl.endswith(f"@{package.version}"):
-        return _plain(f"{package.purl}@{package.version}")
-    return _plain(package.purl)
+    return _plain(short_purl(package))
+
+
+def _fix_list(result: RankedResult) -> str:
+    fixes = display_fixes(result)
+    shown = _plain(", ".join(fixes[:FIX_DISPLAY_CAP]))
+    extra = len(fixes) - FIX_DISPLAY_CAP
+    return f"{shown} +{extra} more" if extra > 0 else shown
+
+
+def _fix(result: RankedResult) -> str:
+    versions = result.enrichment.versions
+    if isinstance(versions, Unavailable):
+        return _na(versions)
+    return _fix_list(result) if display_fixes(result) else "—"
 
 
 def _summary(ranked: list[RankedResult], metadata: RunMetadata) -> list[str]:
@@ -126,14 +139,21 @@ def _highlights(ranked: list[RankedResult]) -> list[str]:
         epss = result.enrichment.epss
         if isinstance(epss, EpssData):
             flags.append(f"EPSS {epss.score:.3f}")
+        if display_fixes(result):
+            flags.append(f"fix: {_fix_list(result)}")
         where = f" — {_package(result.finding.package)}" if result.finding.package else ""
         lines.append(f"- **{_plain(result.finding.cve_id)}** — {', '.join(flags)}{where}")
+        if isinstance(result.enrichment.advisory, GhsaData):
+            lines.append(f"  _{_plain(result.enrichment.advisory.summary)}_")
     return lines
 
 
 def _table(ranked: list[RankedResult]) -> list[str]:
     with_pkg = any(r.finding.package is not None for r in ranked)
+    with_fix = any(display_fixes(r) for r in ranked)
     header = ["#", "CVE", "Decision", "CVSS", "EPSS", "KEV", "Exploits"]
+    if with_fix:
+        header.append("Fix")
     if with_pkg:
         header.append("Package")
     lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
@@ -148,6 +168,8 @@ def _table(ranked: list[RankedResult]) -> list[str]:
             _kev(e.kev),
             _exploits(e.exploits),
         ]
+        if with_fix:
+            row.append(_fix(result))
         if with_pkg:
             row.append(_package(result.finding.package))
         lines.append("| " + " | ".join(row) + " |")
@@ -165,6 +187,10 @@ def _appendix(ranked: list[RankedResult]) -> list[str]:
         )
         if result.finding.package is not None:
             lines.append(f"- package: `{_package(result.finding.package)}`")
+        if isinstance(result.enrichment.advisory, GhsaData):
+            lines.append(f"- summary: {_plain(result.enrichment.advisory.summary)}")
+        if fixed := display_fixes(result):  # appendix carries the full list, uncapped
+            lines.append(f"- fix: {_plain(', '.join(fixed))}")
         lines.append("- decision path:")
         for step in verdict.path.steps:
             lines.append(f"  - `{step.node}` = `{step.value}` _({step.value_source})_")

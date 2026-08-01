@@ -7,13 +7,14 @@ those, using the quickstart run as the example:
 
 ```console
 $ vulnctl enrich CVE-2021-44228 --offline --show-path
-│ CVE-2021-44228 │ ACT │ n/a (offline) │ 1.000 (p100.0) │ yes 2021-12-10 ransomware │ EDB·3 MSF·5 nuclei·1 │
+│ CVE-2021-44228 │ ACT │ n/a (offline) │ 1.000 (p100.0) │ yes ransomware │ EDB·3 MSF·5 nuclei·1 │
 
 CVE-2021-44228 → ACT  (tree cisa-deployer-v1)  [degraded: defaults applied]
   1. exploitation = active  [kev]
   2. exposure     = open  [context]
   3. automatable  = yes  [default]
   4. human_impact = high  [context]
+1 finding(s) · 1 ACT · 1 KEV-listed
 ```
 
 ## The four decisions
@@ -81,9 +82,11 @@ each source said about the finding:
 |---|---|
 | **CVSS** | NVD base score and severity label, e.g. `10.0 CRITICAL`. Technical severity only — it feeds `automatable`, never the verdict directly. |
 | **EPSS** | FIRST's estimated probability of exploitation in the next 30 days, with percentile: `1.000 (p100.0)` means "more likely to be exploited than 100% of scored CVEs". Informational ranking tie-breaker. |
-| **KEV** | `yes <date-added>` when CISA has cataloged in-the-wild exploitation, plus `ransomware` when it's known ransomware-campaign use. `no` is a real answer, not missing data. |
+| **KEV** | `yes` when CISA has cataloged in-the-wild exploitation, plus `ransomware` when it's known ransomware-campaign use. `no` is a real answer, not missing data. The date-added detail lives in the JSON output. |
 | **Exploits** | Public exploit artifact counts from the bundled index: `EDB·3 MSF·5 nuclei·1` = 3 Exploit-DB entries, 5 Metasploit modules, 1 nuclei template. `none` is a real answer as of the index's snapshot date. |
-| **Package** | The affected purl (SBOM/scanner runs only). |
+| **Package** | The affected package, purl-shortened for display (`npm/lodash@4.17.20`). SBOM/scanner runs only. |
+| **Fix** | The version(s) that close the finding, from OSV. On SBOM/scanner runs the list is scoped to the row's own package — `4.17.21` means "upgrade this package to 4.17.21". Long lists cap at 3 with `+N more`; the full list is in JSON and the Markdown appendix. Appears only when a fix is known. |
+| **Summary** | The advisory's one-line description of the vulnerability (GHSA). Appears only when an advisory answered. |
 
 ### `n/a (reason)` cells
 
@@ -100,9 +103,15 @@ reason states why:
 ## Run metadata
 
 The table caption (the `run` object in JSON, `properties` in SARIF)
-summarizes the run itself: which sources were consulted, per-source cache
-hit rates, how many fields degraded, and whether the run was offline. Use
+summarizes the run itself: which sources were consulted, the average cache
+hit rate, how many fields degraded, and whether the run was offline. Use
 it to judge how fresh and complete the evidence behind the verdicts is.
+Per-source hit rates live in the JSON output.
+
+The table format closes with a one-line verdict rollup —
+`5 finding(s) · 1 ACT · 4 TRACK* · 1 KEV-listed` — so the run's headline
+is the last thing printed, next to your prompt. Zero-count decisions are
+omitted.
 
 ## Format-specific notes
 
@@ -112,5 +121,6 @@ it to judge how fresh and complete the evidence behind the verdicts is.
   UIs: Act → `error`, Attend → `warning`, Track\* → `note`, Track →
   `none`; the full decision path rides in each result's Markdown message.
 - **Markdown** (`--format md`) is the stakeholder report: summary,
-  highlights (Act or KEV-listed findings), top-10 table, and a
-  per-finding appendix with every decision path.
+  highlights (Act or KEV-listed findings, each with its fix versions and
+  advisory description when known), top-10 table, and a per-finding
+  appendix with every decision path, advisory summary, and full fix list.

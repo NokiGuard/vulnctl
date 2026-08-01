@@ -20,13 +20,16 @@ from vulnctl.models import (
     DecisionPath,
     Enrichment,
     Finding,
+    GhsaData,
     IngestSource,
+    KevData,
     PackageRef,
     RankedResult,
     RunMetadata,
     Unavailable,
     UnavailableReason,
     Verdict,
+    VersionData,
 )
 from vulnctl.output.markdown import render_markdown
 from vulnctl.pipeline import apply_tree, enrich_findings
@@ -80,8 +83,47 @@ def test_untrusted_strings_cannot_splice_markdown_into_the_report() -> None:
     metadata = RunMetadata(sources=["kev"], offline=True, cache_hit_rate={"kev": 0.0})
     report = render_markdown([hostile], metadata)
     assert "\n# fake heading" not in report  # newlines collapsed: no injected headings
-    assert "pkg:npm/evil\\|Act\\|9.9" in report  # pipes escaped: table cells hold
+    assert "npm/evil\\|Act\\|9.9" in report  # pipes escaped: table cells hold
     assert "`<img" not in report and "<img" not in report  # code spans + HTML neutralized
+
+
+def test_fix_and_description_render_in_report() -> None:
+    na = Unavailable(reason=UnavailableReason.OFFLINE)
+    result = RankedResult(
+        finding=Finding(
+            cve_id="CVE-2021-23337",
+            source=IngestSource.GRYPE,
+            package=PackageRef(purl="pkg:npm/lodash@4.17.20", version="4.17.20"),
+        ),
+        enrichment=Enrichment(
+            epss=na,
+            kev=KevData(listed=True),
+            cvss=na,
+            versions=VersionData(affected=["npm <4.17.21"], fixed=["npm 4.17.21"]),
+            advisory=GhsaData(
+                ghsa_id="GHSA-35jh-r3h4-6jhm",
+                severity="high",
+                summary="Command injection in lodash",
+                versions=VersionData(),
+            ),
+            exploits=na,
+        ),
+        verdict=Verdict(
+            decision=Decision.ACT,
+            path=DecisionPath(steps=[]),
+            tree_id="toy-v1",
+            inputs_degraded=False,
+        ),
+    )
+    metadata = RunMetadata(sources=["kev"], offline=False, cache_hit_rate={"kev": 1.0})
+    report = render_markdown([result], metadata)
+    assert "| Fix |" in report  # column appears when a fix is known
+    assert "| npm 4.17.21 |" in report
+    assert "fix: npm 4.17.21" in report  # highlights carry the remediation
+    assert "_Command injection in lodash_" in report  # highlights carry the description
+    assert "- summary: Command injection in lodash" in report  # appendix detail
+    assert "npm/lodash@4.17.20" in report
+    assert "pkg:npm" not in report  # purls are shortened for display
 
 
 async def test_markdown_structure(cache: Cache, fixture_client: MakeClient) -> None:

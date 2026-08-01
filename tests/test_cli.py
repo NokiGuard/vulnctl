@@ -44,6 +44,7 @@ def test_enrich_offline_renders_table_from_snapshots() -> None:
     assert "n/a (offline)" in result.output  # NVD has no snapshot -> visibly degraded
     assert "offline mode" in result.output
     assert "ACT" in result.output  # KEV-listed + defaults on internet/high context
+    assert "2 finding(s)" in result.output  # verdict rollup line closes the run
 
 
 def test_enrich_offline_with_context_and_show_path() -> None:
@@ -128,7 +129,7 @@ def test_enrich_grype_offline_renders_findings() -> None:
     result = runner.invoke(app, ["enrich", "--offline", "--grype", str(NPM_SCAN)])
     assert result.exit_code == 0
     assert "CVE-2021-23337" in result.output
-    assert "pkg:npm/lodash@4.17.20" in result.output  # Package column on scanner runs
+    assert "npm/lodash@4.17.20" in result.output  # Package column on scanner runs
 
 
 def test_enrich_grype_reads_stdin_via_dash() -> None:

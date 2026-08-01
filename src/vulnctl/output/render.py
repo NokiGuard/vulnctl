@@ -19,7 +19,7 @@ from vulnctl.models import RankedResult, RunMetadata
 from vulnctl.output.json_out import render_json
 from vulnctl.output.markdown import render_markdown
 from vulnctl.output.sarif import render_sarif
-from vulnctl.output.table import build_paths, build_table
+from vulnctl.output.table import build_paths, build_summary, build_table
 
 
 class OutputFormat(StrEnum):
@@ -57,3 +57,4 @@ def render_output(
     console.print(build_table(ranked, metadata))
     if show_path:
         console.print(build_paths(ranked))
+    console.print(build_summary(ranked))

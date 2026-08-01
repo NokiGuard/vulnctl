@@ -14,6 +14,8 @@ visually camouflage a row (e.g. dim an ACT verdict).
 
 from __future__ import annotations
 
+from collections import Counter
+
 from rich.console import Group, RenderableType
 from rich.markup import escape
 from rich.table import Table
@@ -24,13 +26,14 @@ from vulnctl.models import (
     Decision,
     EpssData,
     ExploitData,
+    GhsaData,
     KevData,
     PackageRef,
     RankedResult,
     RunMetadata,
     Unavailable,
 )
-from vulnctl.output import result_sort_key
+from vulnctl.output import FIX_DISPLAY_CAP, display_fixes, result_sort_key, short_purl
 
 _SEVERITY_STYLE = {
     "CRITICAL": "bold red",
@@ -72,9 +75,7 @@ def _epss_cell(epss: EpssData | Unavailable) -> str:
 def _package_cell(package: PackageRef | None) -> str:
     if package is None:
         return "[dim]—[/dim]"
-    if package.version and not package.purl.endswith(f"@{package.version}"):
-        return escape(f"{package.purl}@{package.version}")
-    return escape(package.purl)
+    return escape(short_purl(package))
 
 
 def _exploits_cell(exploits: ExploitData | Unavailable) -> str:
@@ -92,20 +93,39 @@ def _exploits_cell(exploits: ExploitData | Unavailable) -> str:
 
 
 def _kev_cell(kev: KevData | Unavailable) -> str:
+    # The date-added detail lives in JSON/`--show-path`; the cell stays narrow.
     if isinstance(kev, Unavailable):
         return _na(kev)
     if not kev.listed:
         return "no"
-    added = f" {kev.date_added.isoformat()}" if kev.date_added is not None else ""
     ransomware = " [bold red]ransomware[/bold red]" if kev.ransomware else ""
-    return f"[red]yes[/red]{added}{ransomware}"
+    return f"[red]yes[/red]{ransomware}"
+
+
+def _fix_cell(result: RankedResult) -> str:
+    versions = result.enrichment.versions
+    if isinstance(versions, Unavailable):
+        return _na(versions)
+    fixes = display_fixes(result)
+    if not fixes:
+        return "[dim]—[/dim]"
+    shown = f"[green]{escape(', '.join(fixes[:FIX_DISPLAY_CAP]))}[/green]"
+    extra = len(fixes) - FIX_DISPLAY_CAP
+    return f"{shown} [dim]+{extra} more[/dim]" if extra > 0 else shown
+
+
+def _summary_cell(advisory: GhsaData | Unavailable) -> str:
+    if isinstance(advisory, Unavailable):
+        return _na(advisory)
+    return escape(advisory.summary)
 
 
 def _caption(metadata: RunMetadata) -> str:
-    hits = ", ".join(
-        f"{source} {rate:.0%}" for source, rate in sorted(metadata.cache_hit_rate.items())
-    )
-    parts = [f"sources: {', '.join(metadata.sources)}", f"cache hits: {hits}"]
+    # Per-source hit rates stay in JSON; the caption carries one aggregate.
+    parts = [f"sources: {', '.join(metadata.sources)}"]
+    if metadata.cache_hit_rate:
+        avg = sum(metadata.cache_hit_rate.values()) / len(metadata.cache_hit_rate)
+        parts.append(f"cache hits: {avg:.0%} avg")
     if metadata.degradations:
         parts.append(f"{len(metadata.degradations)} degraded field(s)")
     if metadata.offline:
@@ -113,13 +133,38 @@ def _caption(metadata: RunMetadata) -> str:
     return " · ".join(parts)
 
 
+def build_summary(results: list[RankedResult]) -> Text:
+    """One-line verdict rollup — the run's headline, printed last so it lands
+    next to the prompt: counts per decision (zeros omitted) plus KEV exposure."""
+    counts = Counter(result.verdict.decision for result in results)
+    line = Text(f"{len(results)} finding(s)")
+    for decision in (Decision.ACT, Decision.ATTEND, Decision.TRACK_STAR, Decision.TRACK):
+        if counts[decision]:
+            line.append(" · ")
+            line.append(
+                f"{counts[decision]} {decision.value.upper()}", style=_DECISION_STYLE[decision]
+            )
+    kev_listed = sum(
+        1
+        for result in results
+        if isinstance(result.enrichment.kev, KevData) and result.enrichment.kev.listed
+    )
+    if kev_listed:
+        line.append(" · ")
+        line.append(f"{kev_listed} KEV-listed", style="red")
+    return line
+
+
 def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
     """Render ranked findings as a rich Table, most urgent decision first.
 
-    A Package column appears only when a finding carries one (SBOM/scanner
-    paths) — the CVE-list path stays as compact as before.
+    Package, Fix, and Summary columns appear only when some finding has the
+    data (SBOM/scanner paths, OSV/GHSA answers) — a bare CVE-list or offline
+    run stays as compact as before.
     """
     with_packages = any(result.finding.package is not None for result in results)
+    with_fixes = any(display_fixes(result) for result in results)
+    with_summaries = any(isinstance(result.enrichment.advisory, GhsaData) for result in results)
     table = Table(title="vulnctl enrichment", caption=_caption(metadata))
     table.add_column("CVE", no_wrap=True)
     if with_packages:
@@ -129,6 +174,10 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
     table.add_column("EPSS")
     table.add_column("KEV")
     table.add_column("Exploits")
+    if with_fixes:
+        table.add_column("Fix", overflow="fold")
+    if with_summaries:
+        table.add_column("Summary", max_width=48)
 
     for result in sorted(results, key=result_sort_key):
         enrichment = result.enrichment
@@ -142,6 +191,10 @@ def build_table(results: list[RankedResult], metadata: RunMetadata) -> Table:
         ]
         if with_packages:
             row.insert(1, _package_cell(result.finding.package))
+        if with_fixes:
+            row.append(_fix_cell(result))
+        if with_summaries:
+            row.append(_summary_cell(enrichment.advisory))
         table.add_row(*row)
     return table
 
