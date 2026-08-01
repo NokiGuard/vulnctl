@@ -7,9 +7,21 @@ severity desc → EPSS desc → CVSS desc, with unavailable scores sorting last.
 
 from __future__ import annotations
 
+import re
+
 from vulnctl.models import CvssData, Decision, EpssData, PackageRef, RankedResult, VersionData
 
-__all__ = ["FIX_DISPLAY_CAP", "display_fixes", "gate_exit_code", "result_sort_key", "short_purl"]
+__all__ = [
+    "FIX_DISPLAY_CAP",
+    "degradation_groups",
+    "display_fixes",
+    "gate_exit_code",
+    "result_sort_key",
+    "short_purl",
+]
+
+#: The pipeline's per-finding degradation shape: "{source}: {id} unavailable ({reason})".
+_DEGRADATION_RE = re.compile(r"^(?P<source>[a-z]+): \S+ unavailable \((?P<reason>[^)]+)\)$")
 
 FIX_DISPLAY_CAP = 3
 """Fix entries shown inline in table/report cells; the rest fold into '+N more'."""
@@ -60,6 +72,28 @@ def display_fixes(result: RankedResult) -> list[str]:
         if own:
             entries = own
     return list(dict.fromkeys(entries))
+
+
+def degradation_groups(degradations: list[str]) -> tuple[dict[tuple[str, str], int], list[str]]:
+    """Group per-finding degradation strings for display.
+
+    The pipeline emits one ``"{source}: {id} unavailable ({reason})"`` string
+    per finding per source — thousands on a large offline run. Returns
+    ``(groups, passthrough)``: counts keyed by ``(source, reason)`` for
+    strings in that shape, and every other string (resolution notes, ingest
+    warnings) verbatim in original order. JSON keeps the full flat list;
+    only the human formats aggregate.
+    """
+    groups: dict[tuple[str, str], int] = {}
+    passthrough: list[str] = []
+    for entry in degradations:
+        match = _DEGRADATION_RE.match(entry)
+        if match is None:
+            passthrough.append(entry)
+        else:
+            key = (match["source"], match["reason"])
+            groups[key] = groups.get(key, 0) + 1
+    return groups, passthrough
 
 
 def gate_exit_code(results: list[RankedResult], threshold: Decision | None) -> int:

@@ -151,11 +151,37 @@ def test_caption_summarizes_run_metadata() -> None:
     text = " ".join(_render(build_table([row], _METADATA)).split())
     assert "sources: epss, kev, nvd" in text
     assert "cache hits: 50% avg" in text  # aggregate, not six per-source rates
-    assert "1 degraded field(s)" in text
+    assert "degraded: nvd 1 (source down)" in text  # grouped, not one line per finding
     assert "offline" not in text
 
     offline_meta = _METADATA.model_copy(update={"offline": True})
     assert "offline mode" in " ".join(_render(build_table([row], offline_meta)).split())
+
+
+def test_degradation_groups_aggregates_pipeline_strings() -> None:
+    from vulnctl.output import degradation_groups
+
+    degradations = [
+        "nvd: CVE-2020-0001 unavailable (offline)",
+        "nvd: CVE-2020-0002 unavailable (offline)",
+        "epss: CVE-2020-0001 unavailable (not_found)",
+        "osv: GHSA-mh6f-8j2x-4483 has no CVE alias; CVE-only sources cannot answer",
+    ]
+    groups, other = degradation_groups(degradations)
+    assert groups == {("nvd", "offline"): 2, ("epss", "not_found"): 1}
+    assert other == ["osv: GHSA-mh6f-8j2x-4483 has no CVE alias; CVE-only sources cannot answer"]
+
+
+def test_caption_caps_degradation_groups() -> None:
+    # A 500-CVE offline run must not become a 3 000-character caption.
+    degradations = [
+        f"{source}: CVE-2020-0001 unavailable (offline)"
+        for source in ("epss", "ghsa", "kev", "nvd", "osv")
+    ]
+    meta = _METADATA.model_copy(update={"degradations": degradations})
+    row = _result("CVE-2020-0001", decision=Decision.TRACK)
+    text = " ".join(_render(build_table([row], meta)).split())
+    assert "degraded: epss 1 (offline), ghsa 1 (offline), kev 1 (offline), +2 more" in text
 
 
 def test_package_column_only_on_package_bearing_runs() -> None:

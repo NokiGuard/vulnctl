@@ -27,7 +27,13 @@ from vulnctl.models import (
     RunMetadata,
     Unavailable,
 )
-from vulnctl.output import FIX_DISPLAY_CAP, display_fixes, result_sort_key, short_purl
+from vulnctl.output import (
+    FIX_DISPLAY_CAP,
+    degradation_groups,
+    display_fixes,
+    result_sort_key,
+    short_purl,
+)
 
 _DECISION_LABEL = {
     Decision.ACT: "Act",
@@ -118,6 +124,15 @@ def _summary(ranked: list[RankedResult], metadata: RunMetadata) -> list[str]:
             f"- **Degraded inputs:** {degraded} verdict(s) fell back to a tree default; "
             "see the appendix for which step and why."
         )
+    if metadata.degradations:
+        groups, other = degradation_groups(metadata.degradations)
+        gaps = [
+            f"{source}: {count} finding(s) ({reason.replace('_', ' ')})"
+            for (source, reason), count in sorted(groups.items())
+        ]
+        if other:
+            gaps.append(f"{len(other)} note(s) — see JSON output")
+        lines.append(f"- **Data gaps:** {'; '.join(gaps)}")
     if metadata.offline:
         lines.append(
             "- _Generated in offline mode: some sources answered from cache/snapshot only._"

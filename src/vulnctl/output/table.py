@@ -33,7 +33,13 @@ from vulnctl.models import (
     RunMetadata,
     Unavailable,
 )
-from vulnctl.output import FIX_DISPLAY_CAP, display_fixes, result_sort_key, short_purl
+from vulnctl.output import (
+    FIX_DISPLAY_CAP,
+    degradation_groups,
+    display_fixes,
+    result_sort_key,
+    short_purl,
+)
 
 _SEVERITY_STYLE = {
     "CRITICAL": "bold red",
@@ -127,10 +133,26 @@ def _caption(metadata: RunMetadata) -> str:
         avg = sum(metadata.cache_hit_rate.values()) / len(metadata.cache_hit_rate)
         parts.append(f"cache hits: {avg:.0%} avg")
     if metadata.degradations:
-        parts.append(f"{len(metadata.degradations)} degraded field(s)")
+        parts.append(_degraded_part(metadata.degradations))
     if metadata.offline:
         parts.append("offline mode")
     return " · ".join(parts)
+
+
+def _degraded_part(degradations: list[str]) -> str:
+    """Grouped one-part degradation summary: 3 000 strings must not become
+    3 000 caption characters. Full detail stays in JSON."""
+    groups, other = degradation_groups(degradations)
+    entries = [
+        f"{source} {count} ({reason.replace('_', ' ')})"
+        for (source, reason), count in sorted(groups.items())
+    ]
+    if other:
+        entries.append(f"{len(other)} note(s)")
+    shown = entries[:3]
+    if len(entries) > 3:
+        shown.append(f"+{len(entries) - 3} more")
+    return f"degraded: {', '.join(shown)}"
 
 
 def build_summary(results: list[RankedResult]) -> Text:

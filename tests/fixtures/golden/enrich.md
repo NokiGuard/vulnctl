@@ -5,6 +5,7 @@
 - **2 finding(s):** 1 act, 1 attend, 0 track*, 0 track
 - **KEV exposure:** 1 finding(s) on CISA's Known Exploited Vulnerabilities catalog
 - **Degraded inputs:** 2 verdict(s) fell back to a tree default; see the appendix for which step and why.
+- **Data gaps:** epss: 1 finding(s) (offline); ghsa: 2 finding(s) (offline); nvd: 2 finding(s) (offline); osv: 2 finding(s) (offline)
 - _Generated in offline mode: some sources answered from cache/snapshot only._
 
 ## Highlights
