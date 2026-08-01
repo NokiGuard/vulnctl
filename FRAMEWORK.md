@@ -81,6 +81,7 @@ class SourceAdapter(ABC):
 - Isolation rule: adapters import only `base`, `cache`, `models`. Adding a source touches exactly one new module + fixtures + registry line
 
 ### 3.3 Enrichment pipeline
+- Alias-resolves non-CVE finding IDs (GHSA-… from the CLI or a scanner) to CVEs via `OsvAdapter.resolve_ids` before the fan-out; unresolved IDs keep their native ID with a degradation note, and CVE-only adapters answer `Unavailable(not_found)` for them without touching the network
 - Fans out to all registered adapters concurrently (`asyncio.gather` with per-adapter exception capture)
 - Assembles `Enrichment` per finding; any adapter failure → that field becomes `Unavailable(reason)`
 - Emits run metadata: sources used, cache hit rates, degradations

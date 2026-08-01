@@ -25,7 +25,7 @@ A CLI-first vulnerability prioritization engine that turns raw findings into **a
 ## 4. Functional requirements
 
 ### 4.1 Ingestion (v0.1)
-- **FR-1:** Accept one or more CVE IDs as CLI arguments
+- **FR-1:** Accept one or more CVE or GHSA IDs as CLI arguments. GHSA IDs alias-resolve to CVEs via OSV where an alias exists; otherwise the finding enriches under its native ID with CVE-only sources (EPSS, KEV, NVD, exploit index) reported `unavailable`
 - **FR-2:** Accept a CycloneDX 1.4/1.5 JSON SBOM (`--sbom`); resolve components → CVEs via OSV batch API
 - **FR-3:** Accept Grype JSON output (`--grype`)
 - **FR-4 (v0.2):** SPDX SBOMs, Trivy JSON

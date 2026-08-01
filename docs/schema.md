@@ -29,9 +29,11 @@ EPSS, then CVSS — the same order as the table and other formats.
 Each result is a `RankedResult`: `finding` + `enrichment` + `verdict`.
 
 - **`finding`** — the normalized unit of work: `cve_id` (canonical ID: a CVE
-  where one exists, else the native OSV/GHSA ID), `source`
-  (`cli`|`cyclonedx`|`grype`), optional `package` (purl + version),
-  `aliases`, `scanner_severity` (Grype's label, informational), `locations`.
+  where one exists, else the native OSV/GHSA ID; CLI- and Grype-supplied
+  GHSA IDs alias-resolve to their CVE via OSV, with the GHSA ID preserved
+  in `aliases`), `source` (`cli`|`cyclonedx`|`grype`), optional `package`
+  (purl + version), `aliases`, `scanner_severity` (Grype's label,
+  informational), `locations`.
 - **`enrichment`** — fused intel. Each source-backed field
   (`epss`, `kev`, `cvss`, `versions`, `advisory`, `exploits`) is **either** its
   data object **or** an `Unavailable` marker; `cwes` is a list; `provenance`
