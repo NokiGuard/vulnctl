@@ -90,6 +90,7 @@ class SourceAdapter(ABC):
 
 ### 3.4 SSVC engine (the crown jewel — keep it pure)
 - **Pure function:** `(Enrichment, OrgContext, DecisionTree) -> Verdict`. No I/O. 100% branch coverage.
+- `counterfactuals(...)` (also pure) re-walks the tree with one decision point pinned per candidate value, returning every single-input change that alters the decision — the `explain` command's what-if section.
 - Trees are declarative YAML:
 
 ```yaml

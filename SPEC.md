@@ -29,6 +29,8 @@ A CLI-first vulnerability prioritization engine that turns raw findings into **a
 - **FR-2:** Accept a CycloneDX 1.4/1.5 JSON SBOM (`--sbom`); resolve components → CVEs via OSV batch API
 - **FR-3:** Accept Grype JSON output (`--grype`)
 - **FR-4 (v0.2):** SPDX SBOMs, Trivy JSON
+- **FR-24:** `vulnctl explain <VULN_ID>` — one finding in depth: every source's answer with provenance, full version ranges, exploit identifiers, the decision path, and every single-input change that would alter the verdict (counterfactuals)
+- **FR-25:** Display filters on `enrich` (`--min-decision`, `--only-kev`, `--limit`) honored by all output formats; the verdict rollup always counts the unfiltered set and `--fail-on` always evaluates every finding
 
 ### 4.2 Enrichment (v0.1)
 - **FR-5:** For each CVE, gather: EPSS score + percentile; CISA KEV membership (+ date added, ransomware flag); CVSS v3.1 vector and base score from NVD; CWE(s); affected/fixed versions from OSV/GHSA; exploit presence (Exploit-DB, Metasploit modules, nuclei templates)

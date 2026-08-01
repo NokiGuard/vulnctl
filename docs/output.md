@@ -111,7 +111,20 @@ Per-source hit rates live in the JSON output.
 The table format closes with a one-line verdict rollup —
 `5 finding(s) · 1 ACT · 4 TRACK* · 1 KEV-listed` — so the run's headline
 is the last thing printed, next to your prompt. Zero-count decisions are
-omitted.
+omitted. When display filters (`--min-decision`, `--only-kev`, `--limit`)
+hide rows, the rollup reads `32 finding(s) (showing 8)` and still counts
+every finding — filtering never hides that an Act exists, and `--fail-on`
+always evaluates the full set.
+
+Degradations are grouped for display — `degraded: nvd 340 (offline), …` in
+the caption, a `Data gaps` bullet in the Markdown summary — while the JSON
+output keeps the full per-finding list. Table rows are separated into
+sections per decision tier, so reading can stop at the end of ACT.
+
+For one finding in full — every source's answer with provenance, complete
+version ranges, exploit identifiers, and which single input changes would
+alter the verdict — use `vulnctl explain <VULN_ID>` (see
+[cli.md](cli.md)).
 
 ## Format-specific notes
 
