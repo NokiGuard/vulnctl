@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-01
+
+Makes the output actionable and readable, and accepts GHSA identifiers
+everywhere CVE IDs are accepted. The JSON output shape and its
+`schema_version` (`"1"`) are unchanged.
+
+### Added
+
+- **`explain` command**: `vulnctl explain <VULN_ID>` renders one finding in
+  depth — every source's answer with provenance (fetched-at, cache hit/miss),
+  the full affected/fixed version ranges, CWEs, exploit artifact identifiers,
+  the complete decision path, and the **counterfactuals**: every single-input
+  change that would produce a different decision. Accepts CVE and GHSA IDs and
+  honors `--offline`, `--context`, and `--tree`.
+- **GHSA identifiers as input**: `vulnctl enrich GHSA-xxxx-xxxx-xxxx` works
+  alongside CVE IDs, and Grype scans whose matches are GHSA-native (no
+  `relatedVulnerabilities`) alias-resolve to CVEs via OSV before enrichment,
+  preserving the GHSA ID in `aliases`. An identifier with no CVE alias enriches
+  under its native ID rather than being dropped.
+- **Fix versions and advisory summaries in human output**: the table and
+  Markdown report gain a `Fix` column (OSV fixed versions, scoped to the
+  finding's own package on SBOM/scanner runs) and a `Summary` column (the GHSA
+  one-line description). Both were already fetched but reachable only in JSON.
+- **Verdict rollup line**: table runs close with
+  `5 finding(s) · 1 ACT · 4 TRACK* · 1 KEV-listed`.
+- **Display filters**: `--min-decision`, `--only-kev`, and `--limit` shape every
+  output format. The rollup line still counts every finding and reports
+  `(showing M)`, and `--fail-on` still evaluates the unfiltered set, so a
+  filtered-out Act can neither disappear from the summary nor skip the gate.
+- **Live progress display**: per-source progress bars on stderr during online
+  runs — transient, shown only when stderr is a terminal, skipped for
+  `--offline` — leaving piped stdout byte-clean for `-f json`.
+- **Shell completion documentation**: `vulnctl --install-completion` enables
+  completion for commands, flags, and enum values (`--format`, `--fail-on`).
+
+### Changed
+
+- **CVE-only sources now answer honestly for non-CVE identifiers.** KEV
+  previously returned `listed: false` and the exploit index an empty result for
+  a GHSA ID — facts neither CVE-keyed catalog can assert — which let the engine
+  resolve `exploitation=none` with no degradation flag. EPSS, KEV, NVD, and the
+  exploit index now return `unavailable (not_found)` for non-CVE identifiers
+  without issuing a request, so the verdict falls to the tree default and is
+  visibly degraded.
+- **Slimmer table columns**: purls render without the `pkg:` scheme
+  (`npm/lodash@4.17.20`); the KEV cell shows `yes ransomware` without the
+  date added (still present in JSON); the caption reports one average cache-hit
+  rate instead of six per-source figures; and rows are separated into sections
+  per decision tier.
+- **Grouped degradation reporting**: `degraded: nvd 340 (offline), …` in the
+  table caption and a `Data gaps` bullet in the Markdown report, replacing one
+  line per finding per source. JSON keeps the full per-finding list.
+- The positional argument is now `VULN_ID...` (was `CVE_ID...`).
+
+### Fixed
+
+- NVD no longer spends its retry and backoff budget on requests for identifiers
+  it cannot index.
+
 ## [0.1.0] - 2026-07-07
 
 First public release. `vulnctl` turns CVE lists, SBOMs, and scanner output into
@@ -57,5 +116,6 @@ that produced it.
   sign with keyless cosign (OIDC), and publish to PyPI via trusted publishing
   (no stored token).
 
-[Unreleased]: https://github.com/NokiGuard/vulnctl/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/NokiGuard/vulnctl/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/NokiGuard/vulnctl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NokiGuard/vulnctl/releases/tag/v0.1.0

@@ -1,6 +1,6 @@
 [project]
 name = "vulnctl"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI-first vulnerability prioritization: auditable SSVC verdicts from fused threat intelligence"
 readme = "README.md"
 license = "Apache-2.0"

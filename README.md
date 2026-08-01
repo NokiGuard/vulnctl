@@ -16,13 +16,16 @@ to engineering and leadership instead of hand-waving at a number.
 
 ## What it does
 
-- **Ingest** a CVE list, a CycloneDX SBOM (1.4–1.6), or Grype scanner JSON.
+- **Ingest** a list of CVE or GHSA IDs, a CycloneDX SBOM (1.4–1.6), or Grype
+  scanner JSON. GHSA identifiers alias-resolve to CVEs via OSV.
 - **Enrich** each finding from EPSS (exploit probability), CISA KEV (known
   exploited + ransomware), NVD (CVSS vector, CWE), OSV/GHSA (affected/fixed
   versions), and exploit presence (Exploit-DB, Metasploit, nuclei).
 - **Decide** with a bundled CISA-style SSVC deployer tree — or bring your own
   with `--tree`.
-- **Explain** every verdict with the full path that produced it; degraded
+- **Explain** every verdict with the full path that produced it — and one
+  finding in depth with `vulnctl explain <ID>`: each source's answer and
+  provenance, plus which single input change would flip the decision. Degraded
   inputs (a source down, or `--offline`) are visibly flagged, never hidden.
 - **Output** a rich table, JSON, SARIF 2.1.0 (GitHub code scanning), or a
   stakeholder Markdown report — and gate CI with `--fail-on`.
@@ -38,6 +41,9 @@ Requires Python 3.11+ on Linux or macOS. No credentials are required; an NVD
 API key (optional, for higher rate limits) is read from the
 `VULNCTL_NVD_API_KEY` environment variable only.
 
+Enable tab completion for commands, flags, and values with
+`vulnctl --install-completion` (see [docs/cli.md](docs/cli.md)).
+
 ## Quickstart (60 seconds)
 
 **1. See a verdict and the decision path behind it.** This runs entirely from
@@ -45,19 +51,21 @@ bundled snapshots — no network, no API key:
 
 ```console
 $ vulnctl enrich CVE-2021-44228 --offline --show-path
-                                         vulnctl enrichment
-┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
-┃ CVE            ┃ Decision ┃ CVSS          ┃ EPSS           ┃ KEV              ┃ Exploits         ┃
-┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
-│ CVE-2021-44228 │ ACT      │ n/a (offline) │ 1.000 (p100.0) │ yes 2021-12-10   │ EDB·3 MSF·5      │
-│                │          │               │                │ ransomware       │ nuclei·1         │
-└────────────────┴──────────┴───────────────┴────────────────┴──────────────────┴──────────────────┘
+                                          vulnctl enrichment
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
+┃ CVE            ┃ Decision ┃ CVSS          ┃ EPSS           ┃ KEV            ┃ Exploits             ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
+│ CVE-2021-44228 │ ACT      │ n/a (offline) │ 1.000 (p100.0) │ yes ransomware │ EDB·3 MSF·5 nuclei·1 │
+└────────────────┴──────────┴───────────────┴────────────────┴────────────────┴──────────────────────┘
+sources: epss, exploits, ghsa, kev, nvd, osv · cache hits: 0% avg · degraded: ghsa 1 (offline), nvd 1
+                              (offline), osv 1 (offline) · offline mode
 
 CVE-2021-44228 → ACT  (tree cisa-deployer-v1)  [degraded: defaults applied]
   1. exploitation = active  [kev]
   2. exposure     = open  [context]
   3. automatable  = yes  [default]
   4. human_impact = high  [context]
+1 finding(s) · 1 ACT · 1 KEV-listed
 ```
 
 The path is the point. This is `ACT` because CISA KEV lists it as actively
@@ -67,6 +75,10 @@ exploited (`exploitation = active`, from `kev`), it's treated as internet-expose
 CVSS vector to derive it from — so the verdict is flagged *degraded*. Drop
 `--offline` and the live CVSS vector resolves `automatable` from data
 (`value_source = cvss`), clearing the flag.
+
+For the whole evidence file behind one verdict — every source's answer with its
+provenance, the fixed versions, and each single input change that would land on
+a different decision — run `vulnctl explain CVE-2021-44228`.
 
 **2. Feed it your context.** Exposure, mission impact, and overrides that no
 intel source can know come from a small [`context.yaml`](examples/context.yaml):
@@ -110,6 +122,7 @@ with CISA's Track/Track\*/Attend/Act labels). See
 
 | Doc | What's in it |
 |---|---|
+| [docs/cli.md](docs/cli.md) | CLI reference: every command, argument, and option |
 | [docs/output.md](docs/output.md) | Reading the output: what Track/Track\*/Attend/Act mean, the decision path, and every enrichment column |
 | [docs/context.md](docs/context.md) | Every `context.yaml` field, its values, and how each maps to an SSVC decision point |
 | [docs/trees.md](docs/trees.md) | The YAML decision-tree format and how to author/validate a custom tree |
