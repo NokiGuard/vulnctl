@@ -157,3 +157,15 @@ async def test_mixed_ids_answer_cves_and_degrade_ghsa(
     listed = results["CVE-2021-44228"].data
     assert isinstance(listed, KevData) and listed.listed
     assert isinstance(results["GHSA-mh6f-8j2x-4483"].data, Unavailable)
+
+
+async def test_progress_advances_sum_to_requested_ids(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    body = load_fixture("kev", "catalog.json")
+    calls: list[int] = []
+    async with fixture_client(lambda request: httpx.Response(200, text=body)) as client:
+        adapter = KevAdapter(client, cache)
+        adapter.progress = calls.append
+        await adapter.fetch(["CVE-2021-44228", "GHSA-mh6f-8j2x-4483"])
+    assert sum(calls) == 2

@@ -192,3 +192,15 @@ async def test_non_cve_ids_excluded_from_batch_query(
     assert isinstance(ghsa, Unavailable)
     assert ghsa.reason is UnavailableReason.NOT_FOUND
     assert isinstance(results["CVE-2021-44228"].data, EpssData)
+
+
+async def test_progress_advances_sum_to_requested_ids(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    body = load_fixture("epss", "batch.json")
+    calls: list[int] = []
+    async with fixture_client(lambda request: _fixture_handler(body)) as client:
+        adapter = EpssAdapter(client, cache)
+        adapter.progress = calls.append
+        await adapter.fetch(["CVE-2021-44228", "GHSA-mh6f-8j2x-4483"])
+    assert sum(calls) == 2

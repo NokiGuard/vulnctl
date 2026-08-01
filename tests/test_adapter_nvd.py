@@ -293,3 +293,18 @@ async def test_non_cve_ids_never_reach_the_network(
     assert isinstance(data, Unavailable)
     assert data.reason is UnavailableReason.NOT_FOUND
     assert data.detail == "NVD indexes CVE IDs only"
+
+
+async def test_progress_advances_sum_to_requested_ids(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=load_fixture("nvd", "cve-2021-44228.json"))
+
+    async with fixture_client(handler) as client:
+        adapter = NvdAdapter(client, cache)
+        adapter.progress = calls.append
+        await adapter.fetch(["CVE-2021-44228", "GHSA-mh6f-8j2x-4483"])
+    assert sum(calls) == 2  # one fetched, one guard-answered

@@ -506,3 +506,23 @@ async def test_resolve_ids_offline_cold_cache_keeps_native_id_degraded(
     assert answer.canonical_id == "GHSA-35jh-r3h4-6jhm"
     assert isinstance(answer.versions, Unavailable)
     assert answer.versions.reason is UnavailableReason.OFFLINE
+
+
+async def test_progress_advances_sum_to_requested_ids(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    calls: list[int] = []
+    async with fixture_client(Router(load_fixture)) as client:
+        adapter = OsvAdapter(client, cache)
+        adapter.progress = calls.append
+        await adapter.fetch(["GHSA-35jh-r3h4-6jhm", "CVE-2021-23337"])
+    assert sum(calls) == 2
+
+    # resolve_ids keeps the same invariant on its own instance; this second
+    # pass answers one ID from cache and fetches the other.
+    calls.clear()
+    async with fixture_client(Router(load_fixture)) as client:
+        adapter = OsvAdapter(client, cache)
+        adapter.progress = calls.append
+        await adapter.resolve_ids(["GHSA-35jh-r3h4-6jhm", "GHSA-mh6f-8j2x-4483"])
+    assert sum(calls) == 2

@@ -20,6 +20,9 @@ def isolated_cache_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Isolate the cache under tmp_path and widen the terminal so cells don't wrap."""
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     monkeypatch.setenv("COLUMNS", "200")
+    # The progress display gates on stderr.isatty(), not rich's FORCE_COLOR
+    # detection — but scrub the env anyway so a dev shell can't flip anything.
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
 
 
 def test_version() -> None:
@@ -167,8 +170,9 @@ def test_enrich_grype_malformed_fails_loudly(tmp_path: Path) -> None:
 def test_enrich_json_format_is_valid() -> None:
     result = runner.invoke(app, ["enrich", "--offline", "-f", "json", "CVE-2021-44228"])
     assert result.exit_code == 0
-    payload = json.loads(result.output)
+    payload = json.loads(result.output)  # tripwire: any stray progress byte breaks this
     assert payload["schema_version"] == "1"
+    assert result.stderr == ""  # progress display must stay off without a TTY
 
 
 def test_enrich_markdown_format() -> None:

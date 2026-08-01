@@ -161,15 +161,21 @@ class GhsaAdapter(SourceAdapter):
             else:
                 misses.append(cve_id)
 
+        self.progress(len(results))  # guard + cache answers
         if self._offline:
             for cve_id in misses:
                 results[cve_id] = self._unavailable(
                     UnavailableReason.OFFLINE, "GHSA has no bundled snapshot; cache miss"
                 )
+            self.progress(len(misses))
         elif misses:
-            fetched = await bounded_gather(
-                (self._fetch_one(cve_id) for cve_id in misses), limit=_CONCURRENCY
-            )
+
+            async def _one(cve_id: str) -> SourceResult:
+                result = await self._fetch_one(cve_id)
+                self.progress(1)
+                return result
+
+            fetched = await bounded_gather((_one(cve_id) for cve_id in misses), limit=_CONCURRENCY)
             results.update(zip(misses, fetched, strict=True))
         return results
 

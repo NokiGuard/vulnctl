@@ -268,3 +268,15 @@ def test_normalize_range(raw: str, expected: str) -> None:
 )
 def test_purl_label(package: object, expected: str | None) -> None:
     assert _purl_label(package) == expected
+
+
+async def test_progress_advances_sum_to_requested_ids(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    body = load_fixture("ghsa", "advisory-by-cve.json")
+    calls: list[int] = []
+    async with fixture_client(lambda request: httpx.Response(200, text=body)) as client:
+        adapter = GhsaAdapter(client, cache)
+        adapter.progress = calls.append
+        await adapter.fetch(["CVE-2021-23337", "PYSEC-2021-1", "GHSA-mh6f-8j2x-4483"])
+    assert sum(calls) == 3  # fetched + guard-answered + fetched

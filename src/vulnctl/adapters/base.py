@@ -11,7 +11,7 @@ import asyncio
 import time
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Awaitable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import timedelta
 from typing import ClassVar, TypeVar
 
@@ -58,12 +58,22 @@ class SourceResult(BaseModel):
     meta: SourceMeta
 
 
+def _no_progress(count: int) -> None:
+    """Default per-item progress callback: does nothing."""
+
+
 class SourceAdapter(ABC):
     """Base class for intel-source adapters.
 
     Lifecycle per FRAMEWORK.md §3.2: check cache → fetch misses (bounded
     concurrency, per-source rate limit) → validate strictly → write cache.
     The ``httpx.AsyncClient`` is injected, never created per call.
+
+    ``progress`` is display plumbing the pipeline may assign after
+    construction: adapters call ``self.progress(n)`` as work for ``n``
+    requested IDs completes, and total advances per ``fetch`` call must sum
+    to ``len(cve_ids)``. Fire-and-forget — never awaited, never load-bearing,
+    a no-op unless assigned.
     """
 
     name: ClassVar[str]
@@ -74,6 +84,7 @@ class SourceAdapter(ABC):
         self._client = client
         self._cache = cache
         self._offline = offline
+        self.progress: Callable[[int], None] = _no_progress
 
     @abstractmethod
     async def fetch(self, cve_ids: list[str]) -> dict[str, SourceResult]:

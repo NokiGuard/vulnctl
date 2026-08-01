@@ -192,15 +192,21 @@ class OsvAdapter(SourceAdapter):
             else:
                 misses.append(cve_id)
 
+        self.progress(len(results))  # cache answers
         if self._offline:
             for cve_id in misses:
                 results[cve_id] = self._unavailable(
                     UnavailableReason.OFFLINE, "OSV has no bundled snapshot; cache miss"
                 )
+            self.progress(len(misses))
         elif misses:
-            fetched = await bounded_gather(
-                (self._fetch_one(cve_id) for cve_id in misses), limit=_CONCURRENCY
-            )
+
+            async def _one(cve_id: str) -> SourceResult:
+                result = await self._fetch_one(cve_id)
+                self.progress(1)
+                return result
+
+            fetched = await bounded_gather((_one(cve_id) for cve_id in misses), limit=_CONCURRENCY)
             results.update(zip(misses, fetched, strict=True))
         return results
 
@@ -390,6 +396,7 @@ class OsvAdapter(SourceAdapter):
                 resolved[vuln_id] = cached
             else:
                 misses.append(vuln_id)
+        self.progress(len(resolved))  # cache answers
         if self._offline:
             for vuln_id in misses:
                 resolved[vuln_id] = ResolvedVuln(
@@ -399,10 +406,15 @@ class OsvAdapter(SourceAdapter):
                         reason=UnavailableReason.OFFLINE, detail="record not in cache"
                     ),
                 )
+            self.progress(len(misses))
             return resolved
-        fetched = await bounded_gather(
-            (self._resolve_one(vuln_id) for vuln_id in misses), limit=_CONCURRENCY
-        )
+
+        async def _one(vuln_id: str) -> ResolvedVuln:
+            result = await self._resolve_one(vuln_id)
+            self.progress(1)
+            return result
+
+        fetched = await bounded_gather((_one(vuln_id) for vuln_id in misses), limit=_CONCURRENCY)
         resolved.update(zip(misses, fetched, strict=True))
         return resolved
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
@@ -482,3 +483,49 @@ async def test_duplicate_findings_fetch_once_but_answer_each(
 
     assert len(results) == 2
     assert results[0].enrichment == results[1].enrichment
+
+
+# --- progress phases ------------------------------------------------------------
+
+
+class _FakeReporter:
+    """Records phases and advance totals; satisfies ProgressReporter."""
+
+    def __init__(self) -> None:
+        self.phases: dict[str, int | None] = {}
+        self.advances: dict[str, int] = {}
+
+    def add_phase(self, name: str, total: int | None) -> Callable[[int], None]:
+        self.phases[name] = total
+
+        def advance(count: int) -> None:
+            self.advances[name] = self.advances.get(name, 0) + count
+
+        return advance
+
+
+async def test_progress_phases_cover_resolution_and_every_source(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    reporter = _FakeReporter()
+    async with fixture_client(_ghsa_router(load_fixture)) as client:
+        await enrich_findings(
+            [_finding("GHSA-35jh-r3h4-6jhm")], cache=cache, client=client, progress=reporter
+        )
+
+    assert reporter.phases["resolve ids"] == 1
+    assert reporter.advances["resolve ids"] == 1
+    for source in ("epss", "exploits", "ghsa", "kev", "nvd", "osv"):
+        assert reporter.phases[source] == 1  # totals keyed off post-resolution IDs
+        assert reporter.advances[source] == 1  # every adapter reported to completion
+
+
+async def test_no_resolve_phase_for_pure_cve_input(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    reporter = _FakeReporter()
+    async with fixture_client(_live_router(load_fixture)) as client:
+        await enrich_findings(
+            [_finding("CVE-2021-44228")], cache=cache, client=client, progress=reporter
+        )
+    assert "resolve ids" not in reporter.phases

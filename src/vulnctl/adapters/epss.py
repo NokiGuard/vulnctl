@@ -83,12 +83,15 @@ class EpssAdapter(SourceAdapter):
             else:
                 misses.append(cve_id)
 
+        self.progress(len(results))  # guard + cache answers
         if self._offline:
             results.update(self._from_snapshot(misses))
+            self.progress(len(misses))
         else:
             for start in range(0, len(misses), _BATCH_SIZE):
                 batch = misses[start : start + _BATCH_SIZE]
                 results.update(await self._fetch_batch(batch))
+                self.progress(len(batch))
         return results
 
     def _cached_result(self, cve_id: str) -> SourceResult | None:

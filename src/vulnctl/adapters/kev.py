@@ -103,6 +103,7 @@ class KevAdapter(SourceAdapter):
                     meta=self._meta(datetime.now(UTC), cache_hit=False),
                 )
         if not lookups:
+            self.progress(len(cve_ids))
             return results
 
         catalog, meta = await self._get_catalog()
@@ -112,6 +113,7 @@ class KevAdapter(SourceAdapter):
                 data=Unavailable(reason=reason, detail="KEV catalog unavailable"), meta=meta
             )
             results.update(dict.fromkeys(lookups, failure))
+            self.progress(len(cve_ids))
             return results
 
         for cve_id in lookups:
@@ -123,6 +125,7 @@ class KevAdapter(SourceAdapter):
                     listed=True, date_added=entry.date_added, ransomware=entry.ransomware
                 )
             results[cve_id] = SourceResult(data=data, meta=meta)
+        self.progress(len(cve_ids))  # one catalog answers every ID at once
         return results
 
     async def _get_catalog(self) -> tuple[_KevCatalog | None, SourceMeta]:
