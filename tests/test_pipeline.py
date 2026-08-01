@@ -276,6 +276,8 @@ def _ghsa_router(load_fixture: LoadFixture) -> callable[[httpx.Request], httpx.R
         if host == "www.cisa.gov":
             return httpx.Response(200, text=load_fixture("kev", "catalog.json"))
         if host == "services.nvd.nist.gov":
+            # The non-CVE guard must keep GHSA IDs off the wire entirely.
+            assert "GHSA" not in request.url.params.get("cveId", "")
             return httpx.Response(200, text=load_fixture("nvd", "not-found.json"))
         if host == "api.github.com":
             if request.url.params.get("cve_id") == "CVE-2021-23337":
@@ -313,6 +315,22 @@ async def test_grype_ghsa_only_end_to_end(
     advisory = unresolved.enrichment.advisory  # GHSA answers natively for GHSA IDs
     assert isinstance(advisory, GhsaData) and "event-stream" in advisory.summary
     assert any("GHSA-mh6f-8j2x-4483 has no CVE alias" in d for d in metadata.degradations)
+    # CVE-only sources answer honestly — not a false "no"/"none".
+    for field in (
+        unresolved.enrichment.kev,
+        unresolved.enrichment.exploits,
+        unresolved.enrichment.epss,
+        unresolved.enrichment.cvss,
+    ):
+        assert isinstance(field, Unavailable)
+        assert field.reason is UnavailableReason.NOT_FOUND
+
+    # SSVC honesty: exploitation falls to the tree default and the verdict is
+    # visibly degraded, instead of a confident "none [kev+exploits]".
+    ranked = apply_tree([unresolved], OrgContext(), load_bundled_tree())
+    exploitation = ranked[0].verdict.path.steps[0]
+    assert exploitation.value_source == "default"
+    assert ranked[0].verdict.inputs_degraded is True
 
 
 async def test_dedup_after_resolution_merges_ghsa_with_its_cve(

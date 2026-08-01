@@ -123,3 +123,37 @@ async def test_offline_uses_bundled_snapshot(cache: Cache, fixture_client: MakeC
     unknown = results["CVE-1999-99999"].data
     assert isinstance(unknown, KevData)
     assert unknown.listed is False
+
+
+# --- non-CVE ID guard -----------------------------------------------------------
+
+
+async def test_non_cve_ids_are_not_found_without_catalog_fetch(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    # A GHSA ID can never appear in the CVE-keyed catalog: an honest
+    # not_found, never a false listed=False — and a CVE-free run skips the
+    # catalog fetch entirely.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("a CVE-free fetch must not touch the catalog")
+
+    async with fixture_client(handler) as client:
+        adapter = KevAdapter(client, cache)
+        results = await adapter.fetch(["GHSA-mh6f-8j2x-4483"])
+
+    data = results["GHSA-mh6f-8j2x-4483"].data
+    assert isinstance(data, Unavailable)
+    assert data.reason is UnavailableReason.NOT_FOUND
+
+
+async def test_mixed_ids_answer_cves_and_degrade_ghsa(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    body = load_fixture("kev", "catalog.json")
+    async with fixture_client(lambda request: httpx.Response(200, text=body)) as client:
+        adapter = KevAdapter(client, cache)
+        results = await adapter.fetch(["CVE-2021-44228", "GHSA-mh6f-8j2x-4483"])
+
+    listed = results["CVE-2021-44228"].data
+    assert isinstance(listed, KevData) and listed.listed
+    assert isinstance(results["GHSA-mh6f-8j2x-4483"].data, Unavailable)

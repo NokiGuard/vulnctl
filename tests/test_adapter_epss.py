@@ -171,3 +171,24 @@ async def test_offline_prefers_cache_even_when_stale(
 
     assert results["CVE-2021-44228"].data == cached
     assert results["CVE-2021-44228"].meta.cache_hit is True
+
+
+async def test_non_cve_ids_excluded_from_batch_query(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    body = load_fixture("epss", "batch.json")
+    seen_params: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_params.append(request.url.params.get("cve", ""))
+        return _fixture_handler(body)
+
+    async with fixture_client(handler) as client:
+        adapter = EpssAdapter(client, cache)
+        results = await adapter.fetch(["CVE-2021-44228", "GHSA-mh6f-8j2x-4483"])
+
+    assert all("GHSA" not in params for params in seen_params)
+    ghsa = results["GHSA-mh6f-8j2x-4483"].data
+    assert isinstance(ghsa, Unavailable)
+    assert ghsa.reason is UnavailableReason.NOT_FOUND
+    assert isinstance(results["CVE-2021-44228"].data, EpssData)

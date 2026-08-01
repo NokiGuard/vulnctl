@@ -23,7 +23,7 @@ import httpx
 from pydantic import ValidationError
 
 from vulnctl.adapters.base import SourceAdapter, SourceResult, body_too_large, register
-from vulnctl.models import EpssData, SourceMeta, Unavailable, UnavailableReason
+from vulnctl.models import EpssData, SourceMeta, Unavailable, UnavailableReason, is_cve_id
 
 API_URL = "https://api.first.org/data/v1/epss"
 _BATCH_SIZE = 100  # the API caps rows per response at its `limit` param
@@ -71,6 +71,12 @@ class EpssAdapter(SourceAdapter):
         results: dict[str, SourceResult] = {}
         misses: list[str] = []
         for cve_id in cve_ids:
+            if not is_cve_id(cve_id):
+                # EPSS scores CVE IDs only — never enters the query or snapshot.
+                results[cve_id] = self._unavailable(
+                    UnavailableReason.NOT_FOUND, "EPSS scores CVE IDs only"
+                )
+                continue
             cached = self._cached_result(cve_id)
             if cached is not None:
                 results[cve_id] = cached

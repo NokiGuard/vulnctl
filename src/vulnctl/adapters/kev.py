@@ -24,7 +24,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from vulnctl.adapters.base import SourceAdapter, SourceResult, body_too_large, register
-from vulnctl.models import KevData, SourceMeta, Unavailable, UnavailableReason
+from vulnctl.models import KevData, SourceMeta, Unavailable, UnavailableReason, is_cve_id
 
 FEED_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 _CATALOG_KEY = "catalog"
@@ -86,16 +86,35 @@ class KevAdapter(SourceAdapter):
     supports_offline = True
 
     async def fetch(self, cve_ids: list[str]) -> dict[str, SourceResult]:
+        # The catalog holds CVE IDs only: answering listed=False for a GHSA ID
+        # would assert a fact it cannot contain. Guarded before the catalog
+        # branch so non-CVE IDs are not_found even when the catalog is down,
+        # and a run with no CVE IDs never fetches it at all.
+        results: dict[str, SourceResult] = {}
+        lookups: list[str] = []
+        for cve_id in cve_ids:
+            if is_cve_id(cve_id):
+                lookups.append(cve_id)
+            else:
+                results[cve_id] = SourceResult(
+                    data=Unavailable(
+                        reason=UnavailableReason.NOT_FOUND, detail="KEV catalogs CVE IDs only"
+                    ),
+                    meta=self._meta(datetime.now(UTC), cache_hit=False),
+                )
+        if not lookups:
+            return results
+
         catalog, meta = await self._get_catalog()
         if catalog is None:
             reason = UnavailableReason.OFFLINE if self._offline else UnavailableReason.SOURCE_DOWN
             failure = SourceResult(
                 data=Unavailable(reason=reason, detail="KEV catalog unavailable"), meta=meta
             )
-            return dict.fromkeys(cve_ids, failure)
+            results.update(dict.fromkeys(lookups, failure))
+            return results
 
-        results: dict[str, SourceResult] = {}
-        for cve_id in cve_ids:
+        for cve_id in lookups:
             entry = catalog.entries.get(cve_id)
             if entry is None:
                 data = KevData(listed=False)

@@ -277,3 +277,19 @@ async def test_offline_answers_from_cache_only(
     cold = results["CVE-2023-4863"].data
     assert isinstance(cold, Unavailable)
     assert cold.reason is UnavailableReason.OFFLINE
+
+
+async def test_non_cve_ids_never_reach_the_network(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("non-CVE IDs must not produce a request")
+
+    async with fixture_client(handler) as client:
+        adapter = NvdAdapter(client, cache)
+        results = await adapter.fetch(["GHSA-mh6f-8j2x-4483"])
+
+    data = results["GHSA-mh6f-8j2x-4483"].data
+    assert isinstance(data, Unavailable)
+    assert data.reason is UnavailableReason.NOT_FOUND
+    assert data.detail == "NVD indexes CVE IDs only"

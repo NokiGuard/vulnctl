@@ -40,7 +40,14 @@ from vulnctl.adapters.base import (
     register,
 )
 from vulnctl.cache import Cache
-from vulnctl.models import CvssData, NvdData, SourceMeta, Unavailable, UnavailableReason
+from vulnctl.models import (
+    CvssData,
+    NvdData,
+    SourceMeta,
+    Unavailable,
+    UnavailableReason,
+    is_cve_id,
+)
 
 API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 API_KEY_ENV = "VULNCTL_NVD_API_KEY"
@@ -122,6 +129,13 @@ class NvdAdapter(SourceAdapter):
         results: dict[str, SourceResult] = {}
         misses: list[str] = []
         for cve_id in cve_ids:
+            if not is_cve_id(cve_id):
+                # NVD indexes CVE IDs only — skip the doomed request (and its
+                # retry/backoff budget) and answer honestly.
+                results[cve_id] = self._unavailable(
+                    UnavailableReason.NOT_FOUND, "NVD indexes CVE IDs only"
+                )
+                continue
             cached = self._cached_result(cve_id)
             if cached is not None:
                 results[cve_id] = cached
