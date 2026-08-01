@@ -55,11 +55,11 @@ def main(
 
 @app.command()
 def enrich(
-    cve_ids: Annotated[
+    vuln_ids: Annotated[
         list[str] | None,
         typer.Argument(
-            metavar="[CVE_ID...]",
-            help="CVE IDs, e.g. CVE-2021-44228 (omit when using --sbom or --grype).",
+            metavar="[VULN_ID...]",
+            help="CVE or GHSA IDs, e.g. CVE-2021-44228 (omit when using --sbom or --grype).",
         ),
     ] = None,
     sbom_path: Annotated[
@@ -98,12 +98,12 @@ def enrich(
         typer.Option("--show-path", help="Print each finding's decision path (table format)."),
     ] = False,
 ) -> None:
-    """Enrich CVE IDs, an SBOM, or a Grype scan with intel and rank with SSVC verdicts.
+    """Enrich CVE/GHSA IDs, an SBOM, or a Grype scan with intel and rank with SSVC verdicts.
 
     Exit codes: 0 success, 1 input/config error, 2 --fail-on threshold met.
     """
     try:
-        findings = resolve_inputs(cve_ids, sbom_path, grype_source)
+        findings = resolve_inputs(vuln_ids, sbom_path, grype_source)
         org_context = load_context(context_path)
         tree = load_tree(tree_path) if tree_path is not None else load_bundled_tree()
         with Cache() as cache:

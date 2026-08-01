@@ -88,10 +88,11 @@ def test_enrich_bad_tree_file_fails_loudly(tmp_path: Path) -> None:
     assert "error" in result.output
 
 
-def test_enrich_invalid_cve_rejected() -> None:
-    result = runner.invoke(app, ["enrich", "CVE-2021-44228", "GHSA-jfh8-c2jp-5v3q"])
+def test_enrich_invalid_id_rejected() -> None:
+    # GHSA IDs are valid input; an ID outside both schemes is the hard error.
+    result = runner.invoke(app, ["enrich", "CVE-2021-44228", "GHSA-0000-0000-0000"])
     assert result.exit_code == 1  # input error, not a usage (2) or gate (2) code
-    assert "GHSA-jfh8-c2jp-5v3q" in result.output
+    assert "GHSA-0000-0000-0000" in result.output
 
 
 NPM_SBOM = Path(__file__).parent / "fixtures" / "sbom" / "npm-app.cdx.json"

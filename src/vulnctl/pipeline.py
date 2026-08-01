@@ -34,7 +34,7 @@ from vulnctl.adapters.osv import OsvAdapter
 from vulnctl.cache import Cache
 from vulnctl.context import OrgContext
 from vulnctl.ingest import IngestError
-from vulnctl.ingest.cve_list import parse_cve_ids
+from vulnctl.ingest.cve_list import parse_vuln_ids
 from vulnctl.ingest.cyclonedx import parse_sbom, resolve_findings
 from vulnctl.ingest.grype import load_grype
 from vulnctl.models import (
@@ -69,19 +69,19 @@ def _default_client() -> httpx.AsyncClient:
 
 
 def resolve_inputs(
-    cve_ids: list[str] | None, sbom_path: Path | None, grype_source: str | None
+    vuln_ids: list[str] | None, sbom_path: Path | None, grype_source: str | None
 ) -> list[Finding] | None:
-    """Validate exactly one input mode and parse CVE IDs (``None`` = SBOM/Grype).
+    """Validate exactly one input mode and parse CVE/GHSA IDs (``None`` = SBOM/Grype).
 
     Raises:
-        IngestError: if not exactly one input mode is given, or a CVE ID is
+        IngestError: if not exactly one input mode is given, or an ID is
             malformed — both are input errors the CLI maps to exit 1.
     """
-    if sum([bool(cve_ids), sbom_path is not None, grype_source is not None]) != 1:
-        raise IngestError("provide CVE IDs, --sbom, or --grype (exactly one input)")
-    if cve_ids:
+    if sum([bool(vuln_ids), sbom_path is not None, grype_source is not None]) != 1:
+        raise IngestError("provide CVE/GHSA IDs, --sbom, or --grype (exactly one input)")
+    if vuln_ids:
         try:
-            return parse_cve_ids(cve_ids)
+            return parse_vuln_ids(vuln_ids)
         except ValueError as exc:
             raise IngestError(str(exc)) from exc
     return None
