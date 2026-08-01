@@ -133,6 +133,23 @@ def test_enrich_grype_offline_renders_findings() -> None:
     assert "npm/lodash@4.17.20" in result.output  # Package column on scanner runs
 
 
+def test_enrich_offline_ghsa_positional() -> None:
+    # Cold cache offline: no alias resolution possible — the GHSA ID survives
+    # (case-normalized) and the run is visibly degraded, not an error.
+    result = runner.invoke(app, ["enrich", "--offline", "ghsa-MH6F-8J2X-4483"])
+    assert result.exit_code == 0
+    assert "GHSA-mh6f-8j2x-4483" in result.output
+    assert "degraded" in result.output
+
+
+def test_enrich_grype_ghsa_only_offline() -> None:
+    scan = Path(__file__).parent / "fixtures" / "grype" / "ghsa-only.json"
+    result = runner.invoke(app, ["enrich", "--offline", "--grype", str(scan)])
+    assert result.exit_code == 0
+    assert "GHSA-35jh-r3h4-6jhm" in result.output
+    assert "GHSA-mh6f-8j2x-4483" in result.output
+
+
 def test_enrich_grype_reads_stdin_via_dash() -> None:
     result = runner.invoke(app, ["enrich", "--offline", "--grype", "-"], input=NPM_SCAN.read_text())
     assert result.exit_code == 0

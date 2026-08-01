@@ -464,3 +464,45 @@ def test_parse_versions_tolerates_garbage() -> None:
         ]
     }
     assert _parse_versions(record) == VersionData(affected=[">=1"], fixed=[])
+
+
+# --- resolve_ids(): the pipeline's CLI/Grype alias-resolution surface ----------
+
+
+async def test_resolve_ids_maps_ghsa_to_cve_and_caches_both_keys(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    router = Router(load_fixture)
+    async with fixture_client(router) as client:
+        adapter = OsvAdapter(client, cache)
+        resolved = await adapter.resolve_ids(["GHSA-35jh-r3h4-6jhm", "GHSA-mh6f-8j2x-4483"])
+
+    with_cve = resolved["GHSA-35jh-r3h4-6jhm"]
+    assert with_cve.canonical_id == "CVE-2021-23337"
+    assert "GHSA-35jh-r3h4-6jhm" in with_cve.aliases
+    no_cve = resolved["GHSA-mh6f-8j2x-4483"]
+    assert no_cve.canonical_id == "GHSA-mh6f-8j2x-4483"
+    assert isinstance(no_cve.versions, VersionData)
+
+    # The canonical-key cache-write makes a later fetch() a cache hit.
+    async with fixture_client(router) as client:
+        adapter = OsvAdapter(client, cache)
+        fetched = await adapter.fetch(["CVE-2021-23337"])
+    assert fetched["CVE-2021-23337"].meta.cache_hit is True
+    assert router.detail_calls == 2  # both from the resolve pass; fetch added none
+
+
+async def test_resolve_ids_offline_cold_cache_keeps_native_id_degraded(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("offline resolution must not touch the network")
+
+    async with fixture_client(handler) as client:
+        adapter = OsvAdapter(client, cache, offline=True)
+        resolved = await adapter.resolve_ids(["GHSA-35jh-r3h4-6jhm"])
+
+    answer = resolved["GHSA-35jh-r3h4-6jhm"]
+    assert answer.canonical_id == "GHSA-35jh-r3h4-6jhm"
+    assert isinstance(answer.versions, Unavailable)
+    assert answer.versions.reason is UnavailableReason.OFFLINE

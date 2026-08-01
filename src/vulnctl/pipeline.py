@@ -1,5 +1,11 @@
 """Enrichment pipeline: fan out to every registered adapter (FRAMEWORK.md §3.3).
 
+Non-CVE finding IDs (GHSA-… from the CLI or a scanner) are alias-resolved to
+CVEs via OSV before the fan-out, so every downstream source is queried with
+the ID scheme it understands. IDs with no CVE alias enrich under their native
+ID — the CVE-only sources answer ``Unavailable(not_found)`` for those and the
+verdict is visibly degraded rather than confidently wrong.
+
 Adapters run concurrently via ``asyncio.gather`` with per-adapter exception
 capture: an adapter that *raises* (a bug — adapters are supposed to degrade
 internally) turns into ``Unavailable(source_down)`` for every CVE rather than
@@ -53,6 +59,7 @@ from vulnctl.models import (
     Unavailable,
     UnavailableReason,
     VersionData,
+    is_cve_id,
 )
 from vulnctl.ssvc.engine import evaluate
 from vulnctl.ssvc.tree import DecisionTree
@@ -114,15 +121,20 @@ async def enrich_findings(
 ) -> tuple[list[EnrichedFinding], RunMetadata]:
     """Enrich every finding from all registered adapters; never raises for a source.
 
-    ``extra_degradations`` lets callers (the SBOM path) surface ingest-time
-    warnings in the run metadata alongside per-source degradations.
+    Non-CVE finding IDs are first alias-resolved to CVEs via OSV (see
+    :func:`_resolve_aliases`); the fan-out and run metadata key off the
+    post-resolution IDs. ``extra_degradations`` lets callers (the SBOM path)
+    surface ingest-time warnings in the run metadata alongside per-source
+    degradations.
     """
-    cve_ids = list(dict.fromkeys(finding.cve_id for finding in findings))
-
     own_client = client is None
     if client is None:
         client = _default_client()
     try:
+        findings, resolution_notes = await _resolve_aliases(
+            findings, cache=cache, client=client, offline=offline
+        )
+        cve_ids = list(dict.fromkeys(finding.cve_id for finding in findings))
         adapters = [cls(client, cache, offline=offline) for cls in all_adapters()]
         raw = await asyncio.gather(
             *(adapter.fetch(cve_ids) for adapter in adapters), return_exceptions=True
@@ -149,9 +161,83 @@ async def enrich_findings(
         by_source,
         cve_ids,
         offline=offline,
-        extra_degradations=[*extra_degradations, *conflicts],
+        extra_degradations=[*extra_degradations, *resolution_notes, *conflicts],
     )
     return results, metadata
+
+
+async def _resolve_aliases(
+    findings: list[Finding], *, cache: Cache, client: httpx.AsyncClient, offline: bool
+) -> tuple[list[Finding], list[str]]:
+    """Alias-resolve non-CVE finding IDs (GHSA-…) to CVEs via OSV.
+
+    Resolved findings are rebuilt with the canonical CVE as ``cve_id`` and
+    the native ID kept in ``aliases``; unresolved IDs (no CVE alias, source
+    down, or offline cache miss) keep the native ID and surface one
+    degradation note each — fail open, never crash. Findings are then
+    re-deduped on ``(cve_id, package purl, package version)``: conservative,
+    though two purl-less packages sharing one resolved CVE would merge
+    (rare; their aliases/locations union).
+    """
+    pending = list(dict.fromkeys(f.cve_id for f in findings if not is_cve_id(f.cve_id)))
+    if not pending:
+        return findings, []
+
+    resolved = await OsvAdapter(client, cache, offline=offline).resolve_ids(pending)
+
+    notes: dict[str, None] = {}
+    rebuilt: list[Finding] = []
+    for finding in findings:
+        answer = resolved.get(finding.cve_id) if not is_cve_id(finding.cve_id) else None
+        if answer is None:
+            rebuilt.append(finding)
+            continue
+        if answer.canonical_id != finding.cve_id:
+            aliases = [
+                alias
+                for alias in dict.fromkeys([finding.cve_id, *finding.aliases, *answer.aliases])
+                if alias != answer.canonical_id
+            ]
+            rebuilt.append(
+                finding.model_copy(update={"cve_id": answer.canonical_id, "aliases": aliases})
+            )
+            continue
+        rebuilt.append(finding)
+        if isinstance(answer.versions, Unavailable):
+            reason = answer.versions.reason
+            if reason is UnavailableReason.OFFLINE:
+                note = f"osv: {finding.cve_id} not alias-resolved (offline, not in cache)"
+            else:
+                note = f"osv: {finding.cve_id} alias resolution failed ({reason.value})"
+            notes.setdefault(note)
+        else:
+            notes.setdefault(
+                f"osv: {finding.cve_id} has no CVE alias; CVE-only sources cannot answer"
+            )
+    return _dedup_findings(rebuilt), list(notes)
+
+
+def _dedup_findings(findings: list[Finding]) -> list[Finding]:
+    """Merge findings sharing (cve_id, package), unioning aliases and locations."""
+    merged: dict[tuple[str, str | None, str | None], Finding] = {}
+    for finding in findings:
+        package = finding.package
+        key = (
+            finding.cve_id,
+            package.purl if package is not None else None,
+            package.version if package is not None else None,
+        )
+        first = merged.get(key)
+        if first is None:
+            merged[key] = finding
+            continue
+        merged[key] = first.model_copy(
+            update={
+                "aliases": list(dict.fromkeys([*first.aliases, *finding.aliases])),
+                "locations": list(dict.fromkeys([*first.locations, *finding.locations])),
+            }
+        )
+    return list(merged.values())
 
 
 async def enrich_sbom(

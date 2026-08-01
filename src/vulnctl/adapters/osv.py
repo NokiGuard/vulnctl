@@ -1,6 +1,6 @@
 """OSV.dev adapter: version ranges per CVE and package→vulnerability discovery.
 
-Two roles:
+Three roles:
 
 1. Standard enrichment (:meth:`OsvAdapter.fetch`): ``GET /v1/vulns/{id}`` per
    cache miss. OSV serves CVE-native records, so the pipeline's CVE IDs
@@ -10,6 +10,9 @@ Two roles:
    with (purl, version) yields vulnerability IDs whose detail records are then
    fetched and alias-resolved. Called only by the CycloneDX ingester — the one
    place ingest touches the network (FRAMEWORK.md §3.1).
+3. ID alias resolution (:meth:`OsvAdapter.resolve_ids`): CLI- or
+   scanner-supplied non-CVE IDs (GHSA-…) resolve to their CVE alias before
+   the pipeline fans out to the other sources.
 
 Alias resolution: the canonical ID for a discovered vulnerability is the
 record's own ID if it is a CVE, else the lexically first CVE among its
@@ -243,7 +246,7 @@ class OsvAdapter(SourceAdapter):
                 for vuln_id in ids
             )
         )
-        details = await self._resolve_details(unique_ids)
+        details = await self.resolve_ids(unique_ids)
 
         results: list[PackageVulns] = []
         for package, ids in zip(packages, ids_per_package, strict=True):
@@ -254,6 +257,17 @@ class OsvAdapter(SourceAdapter):
                     PackageVulns(package=package, vulns=[details[vuln_id] for vuln_id in ids])
                 )
         return results
+
+    async def resolve_ids(self, vuln_ids: list[str]) -> dict[str, ResolvedVuln]:
+        """Alias-resolve OSV-scheme IDs (GHSA-…, PYSEC-…) to CVE-preferred IDs.
+
+        Cache-through and offline-aware: a cache miss offline or a failed
+        fetch keeps the native ID as canonical with degraded ``versions``
+        rather than dropping the vulnerability. Resolved records cache-write
+        under both ``vuln:{id}`` and the canonical ID, so the pipeline's
+        later :meth:`fetch` for the resolved CVE is a cache hit.
+        """
+        return await self._resolve_details(vuln_ids)
 
     # --- enrichment path -------------------------------------------------------
 

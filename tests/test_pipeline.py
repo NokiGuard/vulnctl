@@ -26,7 +26,7 @@ from vulnctl.models import (
     UnavailableReason,
     VersionData,
 )
-from vulnctl.pipeline import _merge_versions, apply_tree, enrich_findings, enrich_sbom
+from vulnctl.pipeline import _merge_versions, apply_tree, enrich_findings, enrich_grype, enrich_sbom
 from vulnctl.ssvc.tree import load_bundled_tree
 
 
@@ -257,6 +257,89 @@ async def test_sbom_end_to_end(
     # Not KEV-listed and exploit data has no adapter yet: exploitation
     # falls to its default, so the verdict is visibly degraded.
     assert verdict.inputs_degraded is True
+
+
+# --- GHSA-only input: pipeline alias resolution --------------------------------
+
+
+def _ghsa_router(load_fixture: LoadFixture) -> callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.host
+        if host == "api.osv.dev":
+            if request.url.path == "/v1/vulns/GHSA-35jh-r3h4-6jhm":
+                return httpx.Response(200, text=load_fixture("osv", "vuln-ghsa-with-cve.json"))
+            if request.url.path == "/v1/vulns/GHSA-mh6f-8j2x-4483":
+                return httpx.Response(200, text=load_fixture("osv", "vuln-ghsa-no-cve.json"))
+            return httpx.Response(404, text=load_fixture("osv", "not-found.json"))
+        if host == "api.first.org":
+            return httpx.Response(200, text=load_fixture("epss", "batch.json"))
+        if host == "www.cisa.gov":
+            return httpx.Response(200, text=load_fixture("kev", "catalog.json"))
+        if host == "services.nvd.nist.gov":
+            return httpx.Response(200, text=load_fixture("nvd", "not-found.json"))
+        if host == "api.github.com":
+            if request.url.params.get("cve_id") == "CVE-2021-23337":
+                return httpx.Response(200, text=load_fixture("ghsa", "advisory-by-cve.json"))
+            if request.url.path.endswith("/GHSA-mh6f-8j2x-4483"):
+                return httpx.Response(200, text=load_fixture("ghsa", "advisory-by-ghsa-id.json"))
+            return httpx.Response(200, text=load_fixture("ghsa", "not-found-empty-list.json"))
+        raise AssertionError(f"unexpected host {host!r}")
+
+    return handler
+
+
+async def test_grype_ghsa_only_end_to_end(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    """A Thunderbird-style scan: GHSA-native matches, no relatedVulnerabilities."""
+    scan = FIXTURES_DIR / "grype" / "ghsa-only.json"
+    async with fixture_client(_ghsa_router(load_fixture)) as client:
+        results, metadata = await enrich_grype(str(scan), cache=cache, client=client)
+
+    by_id = {r.finding.cve_id: r for r in results}
+    assert set(by_id) == {"CVE-2021-23337", "GHSA-mh6f-8j2x-4483"}
+
+    resolved = by_id["CVE-2021-23337"]
+    assert "GHSA-35jh-r3h4-6jhm" in resolved.finding.aliases  # audit trail kept
+    assert resolved.finding.package is not None
+    assert resolved.finding.package.purl == "pkg:npm/lodash@4.17.20"
+    # Resolution cached the record under the CVE key: the fan-out's OSV call
+    # must be a cache hit, not a second request.
+    assert resolved.enrichment.provenance["osv"].cache_hit is True
+    versions = resolved.enrichment.versions
+    assert isinstance(versions, VersionData) and "pkg:npm/lodash 4.17.21" in versions.fixed
+
+    unresolved = by_id["GHSA-mh6f-8j2x-4483"]
+    advisory = unresolved.enrichment.advisory  # GHSA answers natively for GHSA IDs
+    assert isinstance(advisory, GhsaData) and "event-stream" in advisory.summary
+    assert any("GHSA-mh6f-8j2x-4483 has no CVE alias" in d for d in metadata.degradations)
+
+
+async def test_dedup_after_resolution_merges_ghsa_with_its_cve(
+    cache: Cache, load_fixture: LoadFixture, fixture_client: MakeClient
+) -> None:
+    findings = [_finding("GHSA-35jh-r3h4-6jhm"), _finding("CVE-2021-23337")]
+    async with fixture_client(_ghsa_router(load_fixture)) as client:
+        results, _ = await enrich_findings(findings, cache=cache, client=client)
+
+    (result,) = results  # one vulnerability, not two findings
+    assert result.finding.cve_id == "CVE-2021-23337"
+    assert "GHSA-35jh-r3h4-6jhm" in result.finding.aliases
+
+
+async def test_offline_resolution_keeps_ghsa_and_notes_it(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("offline run must never touch the network")
+
+    async with fixture_client(handler) as client:
+        results, metadata = await enrich_findings(
+            [_finding("GHSA-mh6f-8j2x-4483")], cache=cache, client=client, offline=True
+        )
+
+    assert results[0].finding.cve_id == "GHSA-mh6f-8j2x-4483"
+    assert any("not alias-resolved (offline" in d for d in metadata.degradations)
 
 
 # --- OSV/GHSA keep-both merge -------------------------------------------------
