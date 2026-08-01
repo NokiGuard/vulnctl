@@ -38,6 +38,7 @@ All four (pytest, ruff check, ruff format, mypy) must pass before any commit.
 ```
 src/vulnctl/
 ├── cli.py               # Typer app wiring + cache commands; thin — no business logic here
+├── cli_help.py          # root --help extras: generated flag summary + examples panels
 ├── commands.py          # enrich/explain command signatures; dispatch only
 ├── models.py            # Pydantic: Finding, Enrichment, Verdict, DecisionPath
 ├── ingest/              # cve_list.py, cyclonedx.py, spdx.py, grype.py, trivy.py

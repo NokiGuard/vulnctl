@@ -1,7 +1,11 @@
 # vulnctl CLI reference
 
-Every command, argument, and option. `vulnctl --help` (and `--help` on any
-subcommand) prints the same information from the installed version.
+Every command, argument, and option. `vulnctl --help` prints the same thing
+from the installed version — an **Options by command** panel covering every
+command's flags, plus worked **Examples** — and `--help` on a subcommand
+prints that one command in full, including defaults and value ranges. The
+root summary is generated from the registered parameters, so it cannot drift
+from the real signatures.
 
 ```
 vulnctl [OPTIONS] COMMAND [ARGS]...

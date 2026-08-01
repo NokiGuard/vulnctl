@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from vulnctl.cache import Cache
 from vulnctl.cli import app
+from vulnctl.cli_help import _EXAMPLES
 
 runner = CliRunner()
 
@@ -35,6 +36,54 @@ def test_version() -> None:
 def test_no_args_shows_help() -> None:
     result = runner.invoke(app, [])
     assert "Usage" in result.output
+
+
+def _subcommand_flags() -> set[str]:
+    """Every option flag registered under a subcommand, walked independently.
+
+    Deliberately does not reuse ``cli_help``'s own walk — the point is to catch
+    a flag the generated root summary would miss. The root's own options are
+    excluded: they render in Typer's help panel, which forces colour under
+    GITHUB_ACTIONS (see ``test_completion_options_present``).
+    """
+    flags: set[str] = set()
+    stack = list(get_command(app).commands.values())
+    while stack:
+        cmd = stack.pop()
+        stack.extend(getattr(cmd, "commands", {}).values())
+        flags.update(
+            opt
+            for param in cmd.params
+            if param.param_type_name == "option"  # arguments carry a name, not a flag
+            for opt in param.opts
+        )
+    return flags
+
+
+def test_root_help_lists_every_subcommand_flag() -> None:
+    # `vulnctl --help` on its own has to be usable: Typer's root help names the
+    # commands but none of their flags, so cli_help appends a generated summary.
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert sorted(flag for flag in _subcommand_flags() if flag not in result.output) == []
+
+
+def test_root_help_shows_usage_shapes_and_examples() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert "vulnctl enrich [OPTIONS] [VULN_ID...]" in result.output
+    assert "vulnctl explain [OPTIONS] VULN_ID" in result.output
+    assert "vulnctl cache purge [OPTIONS]" in result.output
+    assert "vulnctl enrich CVE-2021-44228 CVE-2019-0708 --offline --show-path" in result.output
+    assert "vulnctl COMMAND --help" in result.output  # pointer to per-command detail
+
+
+def test_help_examples_use_real_flags() -> None:
+    """Worked examples rot silently; assert every flag in them still exists."""
+    known = _subcommand_flags()
+    for _comment, command in _EXAMPLES:
+        tail = command.split("vulnctl", 1)[1]  # skip flags belonging to piped-in tools
+        used = {token for token in tail.split() if token.startswith("-") and token != "-"}
+        assert used <= known, f"unknown flag(s) in example: {sorted(used - known)}"
 
 
 def test_enrich_offline_renders_table_from_snapshots() -> None:

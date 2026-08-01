@@ -11,10 +11,12 @@ from rich.table import Table
 
 from vulnctl import commands
 from vulnctl.cache import Cache
+from vulnctl.cli_help import HelpfulGroup
 from vulnctl.commands import console
 
 app = typer.Typer(
     name="vulnctl",
+    cls=HelpfulGroup,  # root --help also lists every command's flags + examples
     help="Auditable, SSVC-based vulnerability prioritization.",
     no_args_is_help=True,
 )
