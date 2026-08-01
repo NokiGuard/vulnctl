@@ -20,9 +20,10 @@ from vulnctl.context import ContextError, load_context
 from vulnctl.ingest import IngestError
 from vulnctl.models import Decision
 from vulnctl.output import gate_exit_code
+from vulnctl.output.explain import build_explain
 from vulnctl.output.render import OutputFormat, render_output
 from vulnctl.pipeline import apply_tree, resolve_inputs, run_enrichment
-from vulnctl.ssvc.engine import EvaluationError
+from vulnctl.ssvc.engine import EvaluationError, counterfactuals
 from vulnctl.ssvc.tree import TreeError, load_bundled_tree, load_tree
 
 console = Console()
@@ -125,3 +126,56 @@ def enrich(
         limit=limit,
     )
     raise typer.Exit(gate_exit_code(ranked, fail_on))  # gate sees the unfiltered set
+
+
+def explain(
+    vuln_id: Annotated[
+        str,
+        typer.Argument(
+            metavar="VULN_ID",
+            help="One CVE or GHSA ID, e.g. CVE-2021-44228 or GHSA-35jh-r3h4-6jhm.",
+        ),
+    ],
+    offline: Annotated[
+        bool,
+        typer.Option(
+            "--offline",
+            help="Use only cached data and bundled snapshots; never touch the network.",
+        ),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Org context YAML (default: conservative defaults)."),
+    ] = None,
+    tree_path: Annotated[
+        Path | None,
+        typer.Option("--tree", help="Decision-tree YAML (default: bundled cisa-deployer-v1)."),
+    ] = None,
+) -> None:
+    """Explain one finding in depth: every source's answer with provenance, the
+    full decision path, and which single input changes would alter the verdict.
+
+    Exit codes: 0 success, 1 input/config error.
+    """
+    try:
+        findings = resolve_inputs([vuln_id], None, None)
+        assert findings is not None  # one positional ID → always the ID path
+        org_context = load_context(context_path)
+        tree = load_tree(tree_path) if tree_path is not None else load_bundled_tree()
+        with Cache() as cache:
+            results, metadata = asyncio.run(
+                run_enrichment(
+                    findings=findings,
+                    sbom_path=None,
+                    grype_source=None,
+                    cache=cache,
+                    offline=offline,
+                )
+            )
+        ranked = apply_tree(results, org_context, tree)
+    except _INPUT_ERRORS as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    (result,) = ranked
+    flips = counterfactuals(result.enrichment, org_context, tree, result.verdict)
+    console.print(build_explain(result, metadata, flips))

@@ -22,6 +22,7 @@ cache_app = typer.Typer(help="Inspect and manage the local response cache.", no_
 app.add_typer(cache_app, name="cache")
 
 app.command()(commands.enrich)
+app.command()(commands.explain)
 
 
 def _version_callback(value: bool) -> None:

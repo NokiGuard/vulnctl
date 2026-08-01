@@ -267,6 +267,16 @@ class Verdict(BaseModel):
     inputs_degraded: bool
 
 
+class Counterfactual(BaseModel):
+    """One single-input change that would alter the decision (``explain``)."""
+
+    model_config = _MODEL_CONFIG
+
+    node: str
+    value: str
+    decision: Decision
+
+
 class RankedResult(BaseModel):
     """Finding + Enrichment + Verdict — the unit every formatter consumes (§3.6)."""
 

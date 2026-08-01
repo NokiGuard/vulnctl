@@ -21,7 +21,14 @@ configuration must never silently mis-decide (FRAMEWORK.md §5).
 from __future__ import annotations
 
 from vulnctl.context import OrgContext
-from vulnctl.models import Decision, DecisionPath, DecisionPathStep, Enrichment, Verdict
+from vulnctl.models import (
+    Counterfactual,
+    Decision,
+    DecisionPath,
+    DecisionPathStep,
+    Enrichment,
+    Verdict,
+)
 from vulnctl.ssvc.tree import RESOLVERS, DecisionPointSpec, DecisionTree, TreeNode
 
 _DEFAULT = "default"
@@ -49,6 +56,33 @@ def evaluate(enrichment: Enrichment, context: OrgContext, tree: DecisionTree) ->
         tree_id=tree.id,
         inputs_degraded=degraded,
     )
+
+
+def counterfactuals(
+    enrichment: Enrichment, context: OrgContext, tree: DecisionTree, verdict: Verdict
+) -> list[Counterfactual]:
+    """Single-input what-ifs: which alternative value at any visited decision
+    point would change the decision, holding every other input constant.
+
+    Pure like :func:`evaluate` — each candidate pins one point via a
+    transient override and re-walks the tree, so downstream routing reacts
+    exactly as a real input change would. Only decision-changing candidates
+    are returned, in path order.
+    """
+    flips: list[Counterfactual] = []
+    for step in verdict.path.steps:
+        for value in tree.decision_points[step.node].values:
+            if value == step.value:
+                continue
+            pinned = context.model_copy(
+                update={"overrides": {**context.overrides, step.node: value}}
+            )
+            alternative = evaluate(enrichment, pinned, tree)
+            if alternative.decision is not verdict.decision:
+                flips.append(
+                    Counterfactual(node=step.node, value=value, decision=alternative.decision)
+                )
+    return flips
 
 
 def _resolve_value(

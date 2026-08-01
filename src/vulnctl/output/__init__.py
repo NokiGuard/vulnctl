@@ -20,7 +20,9 @@ from vulnctl.models import (
 )
 
 __all__ = [
+    "DECISION_STYLE",
     "FIX_DISPLAY_CAP",
+    "SEVERITY_STYLE",
     "degradation_groups",
     "display_fixes",
     "filter_results",
@@ -28,6 +30,20 @@ __all__ = [
     "result_sort_key",
     "short_purl",
 ]
+
+#: Rich styles shared by the table and explain renderers.
+DECISION_STYLE = {
+    Decision.ACT: "bold red",
+    Decision.ATTEND: "yellow",
+    Decision.TRACK_STAR: "cyan",
+    Decision.TRACK: "dim",
+}
+SEVERITY_STYLE = {
+    "CRITICAL": "bold red",
+    "HIGH": "red",
+    "MEDIUM": "yellow",
+    "LOW": "green",
+}
 
 #: The pipeline's per-finding degradation shape: "{source}: {id} unavailable ({reason})".
 _DEGRADATION_RE = re.compile(r"^(?P<source>[a-z]+): \S+ unavailable \((?P<reason>[^)]+)\)$")

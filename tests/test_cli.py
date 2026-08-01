@@ -280,6 +280,31 @@ def test_fail_on_values_complete_including_track_star() -> None:
         assert f'"{value}"' in result.output
 
 
+def test_explain_offline_cve() -> None:
+    result = runner.invoke(app, ["explain", "--offline", "CVE-2021-44228"])
+    assert result.exit_code == 0
+    assert "verdict:" in result.output and "ACT" in result.output
+    assert "exploitation = active" in result.output and "[kev]" in result.output
+    assert "evidence" in result.output
+    assert "what would change this verdict" in result.output
+
+
+def test_explain_offline_ghsa() -> None:
+    # Cold cache offline: the GHSA ID stays native (case-normalized) and
+    # CVE-only sources answer honestly instead of asserting false negatives.
+    result = runner.invoke(app, ["explain", "--offline", "ghsa-MH6F-8J2X-4483"])
+    assert result.exit_code == 0
+    assert "GHSA-mh6f-8j2x-4483" in result.output
+    assert "n/a (not found" in result.output
+    assert "what would change this verdict" in result.output
+
+
+def test_explain_invalid_id_rejected() -> None:
+    result = runner.invoke(app, ["explain", "NOPE-123"])
+    assert result.exit_code == 1
+    assert "NOPE-123" in result.output
+
+
 def test_cache_stats_renders_counts(tmp_path: Path) -> None:
     with Cache() as cache:
         cache.set("epss", "CVE-2021-44228", "{}")

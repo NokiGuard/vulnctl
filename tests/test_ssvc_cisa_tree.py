@@ -175,3 +175,45 @@ def test_isolated_low_impact_estate_tracks_even_when_active() -> None:
     )
     # active/small/yes/low → track* per the table.
     assert verdict.decision is Decision.TRACK_STAR
+
+
+def test_counterfactuals_match_the_deployer_table() -> None:
+    from vulnctl.models import Counterfactual
+    from vulnctl.ssvc.engine import counterfactuals
+
+    # KEV-listed + automatable CVSS on the default internet/high context:
+    # (active, open, yes, high) → ACT.
+    enr = enrichment(kev=KevData(listed=True), cvss=_AUTOMATABLE_CVSS)
+    context = OrgContext()
+    verdict = evaluate(enr, context, TREE)
+    assert verdict.decision is ACT
+
+    # Every single-input flip, in path order — checked against EXPECTED above.
+    # human_impact=very_high stays ACT, so it must NOT appear.
+    flips = counterfactuals(enr, context, TREE, verdict)
+    assert flips == [
+        Counterfactual(node="exploitation", value="none", decision=TS),
+        Counterfactual(node="exploitation", value="poc", decision=A),
+        Counterfactual(node="exposure", value="small", decision=A),
+        Counterfactual(node="exposure", value="controlled", decision=A),
+        Counterfactual(node="automatable", value="no", decision=A),
+        Counterfactual(node="human_impact", value="low", decision=A),
+        Counterfactual(node="human_impact", value="medium", decision=A),
+    ]
+
+
+def test_counterfactuals_respect_existing_overrides() -> None:
+    from vulnctl.ssvc.engine import counterfactuals
+
+    # A real override pins exposure=small; counterfactuals must layer on top
+    # of it, not silently drop it.
+    enr = enrichment(kev=KevData(listed=True), cvss=_AUTOMATABLE_CVSS)
+    context = OrgContext(overrides={"exposure": "small"})
+    verdict = evaluate(enr, context, TREE)
+    assert verdict.decision is A  # (active, small, yes, high)
+
+    flips = counterfactuals(enr, context, TREE, verdict)
+    for flip in flips:
+        pinned = OrgContext(overrides={"exposure": "small", flip.node: flip.value})
+        assert evaluate(enr, pinned, TREE).decision is flip.decision
+        assert flip.decision is not verdict.decision

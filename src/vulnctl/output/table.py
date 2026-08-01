@@ -34,26 +34,18 @@ from vulnctl.models import (
     Unavailable,
 )
 from vulnctl.output import (
+    DECISION_STYLE as _DECISION_STYLE,
+)
+from vulnctl.output import (
     FIX_DISPLAY_CAP,
     degradation_groups,
     display_fixes,
     result_sort_key,
     short_purl,
 )
-
-_SEVERITY_STYLE = {
-    "CRITICAL": "bold red",
-    "HIGH": "red",
-    "MEDIUM": "yellow",
-    "LOW": "green",
-}
-
-_DECISION_STYLE = {
-    Decision.ACT: "bold red",
-    Decision.ATTEND: "yellow",
-    Decision.TRACK_STAR: "cyan",
-    Decision.TRACK: "dim",
-}
+from vulnctl.output import (
+    SEVERITY_STYLE as _SEVERITY_STYLE,
+)
 
 
 def _na(value: Unavailable) -> str:
