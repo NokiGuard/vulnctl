@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
@@ -75,6 +76,25 @@ def test_root_help_shows_usage_shapes_and_examples() -> None:
     assert "vulnctl cache purge [OPTIONS]" in result.output
     assert "vulnctl enrich CVE-2021-44228 CVE-2019-0708 --offline --show-path" in result.output
     assert "vulnctl COMMAND --help" in result.output  # pointer to per-command detail
+
+
+def test_root_help_type_column_matches_per_command_help() -> None:
+    # The type column is Click's own metavar, not a hand-derived one, so it
+    # tracks whatever spelling the installed Typer uses (0.26 prints `PATH`,
+    # 0.27 prints `<path>`) instead of disagreeing with the panels above it.
+    def plain(text: str) -> str:
+        return re.sub(r"\x1b\[[0-9;]*m", "", text)  # CI forces colour on Typer's console
+
+    def option_row(output: str) -> str:
+        # The flag also occurs inside other params' help text; take the row it
+        # heads, panel border and indent stripped.
+        rows = [ln.lstrip("│ ") for ln in plain(output).splitlines()]
+        (row,) = [ln for ln in rows if ln.startswith("--sbom")]
+        return row
+
+    metavar = option_row(runner.invoke(app, ["enrich", "--help"]).output).split()[1]
+    assert metavar.strip("<>").lower() == "path"
+    assert metavar in option_row(runner.invoke(app, ["--help"]).output)
 
 
 def test_help_examples_use_real_flags() -> None:

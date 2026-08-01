@@ -57,21 +57,18 @@ _EXAMPLES: tuple[tuple[str, str], ...] = (
 )
 
 
-def _value_hint(param: Any) -> str:
-    """Render what an option takes: ``PATH``, ``[a|b]``, or "" for a switch."""
-    if getattr(param, "is_flag", False):
-        return ""
-    if param.metavar:
-        return str(param.metavar)
-    choices = getattr(param.type, "choices", None)
-    if choices:
-        return "[" + "|".join(str(choice) for choice in choices) + "]"
-    return str(param.type.name).upper()
+def _metavar(param: Any, ctx: Any) -> str:
+    """What a parameter takes, spelled the way Typer's own help spells it.
 
-
-def _arg_name(param: Any) -> str:
-    """The metavar an argument is documented under, e.g. ``[VULN_ID...]``."""
-    return str(param.metavar or str(param.name).upper())
+    Delegates to Click rather than deriving it, so the appended panel agrees
+    with the per-command panels on whatever version is installed — Typer 0.26
+    renders ``PATH``, 0.27 renders ``<path>``. Click gained the ``ctx``
+    argument in 8.2; older versions take none.
+    """
+    try:
+        return str(param.make_metavar(ctx=ctx))
+    except TypeError:
+        return str(param.make_metavar())
 
 
 def _visible_params(cmd: Any, kind: str) -> list[Any]:
@@ -82,28 +79,30 @@ def _visible_params(cmd: Any, kind: str) -> list[Any]:
     ]
 
 
-def _usage(path: str, cmd: Any) -> str:
+def _usage(path: str, cmd: Any, ctx: Any) -> str:
     """The one-line invocation shape, e.g. ``vulnctl enrich [OPTIONS] [VULN_ID...]``."""
     parts = [path]
     if _visible_params(cmd, "option"):
         parts.append("[OPTIONS]")
-    parts.extend(_arg_name(param) for param in _visible_params(cmd, "argument"))
+    parts.extend(_metavar(param, ctx) for param in _visible_params(cmd, "argument"))
     return " ".join(parts)
 
 
-def _param_rows(cmd: Any) -> Iterator[tuple[Text, Text, str]]:
+def _param_rows(cmd: Any, ctx: Any) -> Iterator[tuple[Text, Text, str]]:
     """Yield ``(name, value hint, help)`` for one command's arguments and options."""
     for param in _visible_params(cmd, "argument"):
+        # No type column: an argument's metavar already names what it takes.
         yield (
-            Text(f"  {_arg_name(param)}", style=_STYLE_OPTION),
-            Text(str(param.type.name).upper(), style=_STYLE_TYPES),
+            Text(f"  {_metavar(param, ctx)}", style=_STYLE_OPTION),
+            Text(""),
             str(getattr(param, "help", "") or ""),
         )
     for param in _visible_params(cmd, "option"):
         switch = bool(getattr(param, "is_flag", False))
+        hint = "" if switch else _metavar(param, ctx)
         yield (
             Text("  " + " ".join(param.opts), style=_STYLE_SWITCH if switch else _STYLE_OPTION),
-            Text(_value_hint(param), style=_STYLE_TYPES),
+            Text(hint, style=_STYLE_TYPES),
             str(getattr(param, "help", "") or ""),
         )
 
@@ -127,7 +126,7 @@ def _leaf_commands(group: Any, prefix: str) -> Iterator[tuple[str, str, Any]]:
             yield label, name, cmd
 
 
-def _flags_panel(group: Any, prog: str) -> Panel:
+def _flags_panel(group: Any, prog: str, ctx: Any) -> Panel:
     """Every command's parameters, generated from the registered Click objects."""
     table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 1))
     table.add_column(no_wrap=True)  # command / flag
@@ -140,9 +139,9 @@ def _flags_panel(group: Any, prog: str) -> Panel:
         table.add_row(
             Text(label, style="bold"),
             "",
-            Text(_usage(f"{prog} {label}", cmd), style="dim"),
+            Text(_usage(f"{prog} {label}", cmd, ctx), style="dim"),
         )
-        for name, hint, help_text in _param_rows(cmd):
+        for name, hint, help_text in _param_rows(cmd, ctx):
             table.add_row(name, hint, help_text)
 
     return Panel(
@@ -178,7 +177,7 @@ class HelpfulGroup(TyperGroup):
         super().format_help(ctx, formatter)
         prog = str(ctx.find_root().info_name or "vulnctl")
         console = Console()
-        console.print(_flags_panel(self, prog))
+        console.print(_flags_panel(self, prog, ctx))
         console.print(_examples_panel())
         console.print(
             Padding(

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Root help type column now matches Typer's own spelling.** The generated
+  "Options by command" panel derived its type column itself (`PATH`, `TEXT`),
+  which disagreed with the per-command panels on Typer 0.27+ — what a fresh
+  `pipx install vulnctl` resolves — where Typer prints `<path>`, `<str>`. It
+  now delegates to Click's metavar, so both spellings track the installed
+  version. Arguments drop the column entirely: their metavar already names
+  what they take.
+
 ## [0.2.1] - 2026-08-01
 
 ### Added
