@@ -214,6 +214,26 @@ def test_input_error_beats_gate_exit_code() -> None:
     assert result.exit_code == 1
 
 
+def test_completion_options_present() -> None:
+    # Typer's completion must stay enabled — it is the documented way to get
+    # tab completion for flags and enum values (docs/cli.md).
+    result = runner.invoke(app, ["--help"])
+    assert "--install-completion" in result.output
+
+
+def test_fail_on_values_complete_including_track_star() -> None:
+    result = runner.invoke(
+        app,
+        [],
+        env={
+            "_VULNCTL_COMPLETE": "complete_zsh",
+            "_TYPER_COMPLETE_ARGS": "vulnctl enrich --fail-on ",
+        },
+    )
+    for value in ("track", "track*", "attend", "act"):
+        assert f'"{value}"' in result.output
+
+
 def test_cache_stats_renders_counts(tmp_path: Path) -> None:
     with Cache() as cache:
         cache.set("epss", "CVE-2021-44228", "{}")
