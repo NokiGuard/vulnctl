@@ -7,6 +7,7 @@ from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 import pytest
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from vulnctl.cache import Cache
@@ -262,9 +263,13 @@ def test_only_kev_filters_to_listed_findings() -> None:
 
 def test_completion_options_present() -> None:
     # Typer's completion must stay enabled — it is the documented way to get
-    # tab completion for flags and enum values (docs/cli.md).
-    result = runner.invoke(app, ["--help"])
-    assert "--install-completion" in result.output
+    # tab completion for flags and enum values (docs/cli.md). Asserted against
+    # the registered parameters rather than --help text: Typer forces color on
+    # its help console when GITHUB_ACTIONS is set, and rich then renders each
+    # switch as several styled spans ("-", "-install", "-completion"), so the
+    # flag never appears in the output as one literal substring.
+    flags = {opt for param in get_command(app).params for opt in param.opts}
+    assert {"--install-completion", "--show-completion"} <= flags
 
 
 def test_fail_on_values_complete_including_track_star() -> None:
