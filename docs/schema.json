@@ -241,7 +241,7 @@
     },
     "Finding": {
       "additionalProperties": false,
-      "description": "Normalized unit of work produced by the ingest layer.\n\n``cve_id`` holds the canonical vulnerability ID: a CVE ID where one\nexists, else the native OSV/GHSA ID (SBOM path \u2014 alias resolution\nhappens in the OSV adapter). ``aliases`` records the other IDs the same\nvulnerability is known by, preserving the audit trail of that\nresolution (e.g. the GHSA ID that resolved to this CVE).\n\n``scanner_severity`` is the ingesting scanner's own severity label,\ncarried as informational metadata only \u2014 it never feeds the SSVC\nengine. ``locations`` lists the file paths a scanner reported for this\nfinding (several when layer dedup merged repeated matches).",
+      "description": "Normalized unit of work produced by the ingest layer.\n\n``cve_id`` holds the canonical vulnerability ID: a CVE ID where one\nexists, else the native OSV/GHSA ID. Alias resolution happens in the\nOSV adapter for SBOM discovery, and in the pipeline (via the same\nadapter) for CLI- or scanner-supplied GHSA IDs. ``aliases`` records the\nother IDs the same vulnerability is known by, preserving the audit\ntrail of that resolution (e.g. the GHSA ID that resolved to this CVE).\n\n``scanner_severity`` is the ingesting scanner's own severity label,\ncarried as informational metadata only \u2014 it never feeds the SSVC\nengine. ``locations`` lists the file paths a scanner reported for this\nfinding (several when layer dedup merged repeated matches).",
       "properties": {
         "cve_id": {
           "title": "Cve Id",

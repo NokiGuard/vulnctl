@@ -6,12 +6,9 @@ architecture rule 3: fail loud on input).
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 
-from vulnctl.models import Finding, IngestSource
-
-CVE_ID_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
+from vulnctl.models import CVE_ID_RE, Finding, IngestSource
 
 
 def parse_cve_ids(raw_ids: Iterable[str]) -> list[Finding]:

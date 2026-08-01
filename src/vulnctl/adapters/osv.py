@@ -49,6 +49,7 @@ from vulnctl.adapters.base import (
     register,
 )
 from vulnctl.models import (
+    CVE_ID_RE,
     PackageRef,
     SourceMeta,
     Unavailable,
@@ -60,7 +61,6 @@ API_URL = "https://api.osv.dev/v1"
 _QUERY_BATCH_SIZE = 100  # queries per querybatch request (API cap: 1,000)
 _CONCURRENCY = 8  # parallel detail fetches
 
-_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
 _RANGE_TYPES = frozenset({"SEMVER", "ECOSYSTEM"})
 
 #: IDs come from scanner files and querybatch responses, and are embedded in
@@ -93,9 +93,9 @@ class PackageVulns(BaseModel):
 
 def _canonical_id(native_id: str, aliases: list[str]) -> str:
     """The ID a Finding should carry: the CVE if one exists, else the native ID."""
-    if _CVE_RE.fullmatch(native_id):
+    if CVE_ID_RE.fullmatch(native_id):
         return native_id.upper()
-    cves = sorted(alias.upper() for alias in aliases if _CVE_RE.fullmatch(alias))
+    cves = sorted(alias.upper() for alias in aliases if CVE_ID_RE.fullmatch(alias))
     return cves[0] if cves else native_id
 
 

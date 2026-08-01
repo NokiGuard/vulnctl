@@ -24,8 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from vulnctl.ingest import IngestError
-from vulnctl.ingest.cve_list import CVE_ID_RE
-from vulnctl.models import Finding, IngestSource, PackageRef
+from vulnctl.models import CVE_ID_RE, Finding, IngestSource, PackageRef
 
 MAX_GRYPE_FILE_BYTES = 64 * 1024 * 1024
 

@@ -9,12 +9,25 @@ verdicts are visibly degraded (FRAMEWORK.md §2).
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 _MODEL_CONFIG = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+#: The two vulnerability-ID schemes vulnctl accepts as input. Shared here —
+#: the one module both ingest and adapters may import (CLAUDE.md rule 1) —
+#: so the schemes cannot drift between validation sites.
+CVE_ID_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
+GHSA_ID_RE = re.compile(r"GHSA(-[23456789cfghjmpqrvwx]{4}){3}", re.IGNORECASE)
+
+
+def is_cve_id(vuln_id: str) -> bool:
+    """True when ``vuln_id`` is a CVE identifier — the only scheme the
+    CVE-keyed sources (EPSS, KEV, NVD, the exploit index) can answer for."""
+    return CVE_ID_RE.fullmatch(vuln_id) is not None
 
 
 class IngestSource(StrEnum):
@@ -56,10 +69,11 @@ class Finding(BaseModel):
     """Normalized unit of work produced by the ingest layer.
 
     ``cve_id`` holds the canonical vulnerability ID: a CVE ID where one
-    exists, else the native OSV/GHSA ID (SBOM path — alias resolution
-    happens in the OSV adapter). ``aliases`` records the other IDs the same
-    vulnerability is known by, preserving the audit trail of that
-    resolution (e.g. the GHSA ID that resolved to this CVE).
+    exists, else the native OSV/GHSA ID. Alias resolution happens in the
+    OSV adapter for SBOM discovery, and in the pipeline (via the same
+    adapter) for CLI- or scanner-supplied GHSA IDs. ``aliases`` records the
+    other IDs the same vulnerability is known by, preserving the audit
+    trail of that resolution (e.g. the GHSA ID that resolved to this CVE).
 
     ``scanner_severity`` is the ingesting scanner's own severity label,
     carried as informational metadata only — it never feeds the SSVC

@@ -25,7 +25,6 @@ No bundled snapshot: offline mode answers from cache only
 from __future__ import annotations
 
 import os
-import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -40,13 +39,19 @@ from vulnctl.adapters.base import (
     register,
 )
 from vulnctl.cache import Cache
-from vulnctl.models import GhsaData, SourceMeta, Unavailable, UnavailableReason, VersionData
+from vulnctl.models import (
+    CVE_ID_RE,
+    GHSA_ID_RE,
+    GhsaData,
+    SourceMeta,
+    Unavailable,
+    UnavailableReason,
+    VersionData,
+)
 
 API_URL = "https://api.github.com/advisories"
 TOKEN_ENV = "VULNCTL_GITHUB_TOKEN"
 
-_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.IGNORECASE)
-_GHSA_RE = re.compile(r"GHSA(-[23456789cfghjmpqrvwx]{4}){3}", re.IGNORECASE)
 _CONCURRENCY = 8
 
 #: GHSA ecosystem names → purl types, matching the labels OSV records carry.
@@ -145,7 +150,7 @@ class GhsaAdapter(SourceAdapter):
         results: dict[str, SourceResult] = {}
         misses: list[str] = []
         for cve_id in cve_ids:
-            if not (_CVE_RE.fullmatch(cve_id) or _GHSA_RE.fullmatch(cve_id)):
+            if not (CVE_ID_RE.fullmatch(cve_id) or GHSA_ID_RE.fullmatch(cve_id)):
                 results[cve_id] = self._unavailable(
                     UnavailableReason.NOT_FOUND, "GitHub answers only CVE or GHSA IDs"
                 )
@@ -179,7 +184,7 @@ class GhsaAdapter(SourceAdapter):
         return SourceResult(data=data, meta=self._meta(entry.fetched_at, cache_hit=True))
 
     async def _fetch_one(self, cve_id: str) -> SourceResult:
-        if _CVE_RE.fullmatch(cve_id):
+        if CVE_ID_RE.fullmatch(cve_id):
             url, params = API_URL, {"cve_id": cve_id}
         else:
             url, params = f"{API_URL}/{cve_id}", {}
