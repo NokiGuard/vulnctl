@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Build backend pinned** to `hatchling==1.32.4`, the version that built
+  v0.3.0. The unpinned backend had started writing Core Metadata 2.5, which
+  the pinned PyPI upload action rejected on v0.3.0's first upload. Releases
+  now build reproducibly, and backend bumps are deliberate (see
+  `docs/releasing.md`, *Build backend*).
+
 ## [0.3.0] - 2026-10-09
 
 Makes large runs practical: save a free NVD API key once and NVD lookups,

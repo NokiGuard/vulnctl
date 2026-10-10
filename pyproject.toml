@@ -45,7 +45,11 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+# Pinned exactly: the backend decides the Core Metadata version written into
+# every release artifact, and an unannounced bump (1.32 → Metadata 2.5) broke
+# the v0.3.0 upload. Bump deliberately, together with the pypi-publish action
+# in release.yml — see docs/releasing.md "Build backend".
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

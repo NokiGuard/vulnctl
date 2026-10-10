@@ -35,6 +35,29 @@ Every `uses:` is pinned to a full commit SHA.
 3. *(Optional)* repo secret `VULNCTL_NVD_API_KEY` to raise NVD rate limits during
    Gate 2. vulnctl fails open without it.
 
+## Build backend
+
+`pyproject.toml` pins the build backend exactly (`hatchling==1.32.4`). The
+backend decides which Core Metadata version goes into the wheel and sdist, and
+the upload step (`pypa/gh-action-pypi-publish` in `release.yml`, which bundles
+Twine) must understand that version. The dry run skips the upload, so it can't
+catch a mismatch. That is what failed v0.3.0's first upload: unpinned
+hatchling 1.32 wrote Metadata 2.5, and the pinned action's Twine 6 rejected it.
+
+To bump hatchling:
+
+1. Change the pin, then build and check both artifacts with the Twine version
+   the pinned action ships:
+
+   ```bash
+   uv build -o /tmp/vulnctl-dist
+   uvx --from 'twine>=7' twine check --strict /tmp/vulnctl-dist/*
+   ```
+
+2. If Twine rejects the metadata version, bump `gh-action-pypi-publish` to a
+   release whose Twine accepts it. Pin the action to its **peeled commit
+   SHA**, not the annotated tag object.
+
 ## Dry run (no publish)
 
 Every part of the pipeline *except* the PyPI upload and the GitHub Release runs
