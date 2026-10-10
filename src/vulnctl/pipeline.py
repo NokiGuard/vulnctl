@@ -27,7 +27,7 @@ ranges and they disagree, OSV is used and the disagreement is recorded in
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -70,7 +70,8 @@ _NO_ADAPTER = Unavailable(
 )
 
 
-def _default_client() -> httpx.AsyncClient:
+def default_client() -> httpx.AsyncClient:
+    """The shared HTTP client shape: 30s timeout, vulnctl User-Agent."""
     return httpx.AsyncClient(
         timeout=httpx.Timeout(30.0), headers={"User-Agent": f"vulnctl/{__version__}"}
     )
@@ -102,21 +103,29 @@ async def run_enrichment(
     grype_source: str | None,
     cache: Cache,
     offline: bool,
+    credentials: Mapping[str, str] | None = None,
 ) -> tuple[list[EnrichedFinding], RunMetadata]:
     """Dispatch to the matching enrichment entry point for the chosen input mode.
 
     Owns the live progress display (stderr, TTY-gated — see
     :mod:`vulnctl.output.progress`); offline runs finish in milliseconds, so
-    the display is skipped outright rather than flickering.
+    the display is skipped outright rather than flickering. ``credentials``
+    maps adapter name → API key (resolved by the CLI layer).
     """
     reporter = EnrichmentProgress(enabled=False if offline else None)
     with reporter:
         if findings is not None:
-            return await enrich_findings(findings, cache=cache, offline=offline, progress=reporter)
+            return await enrich_findings(
+                findings, cache=cache, offline=offline, progress=reporter, credentials=credentials
+            )
         if sbom_path is not None:
-            return await enrich_sbom(sbom_path, cache=cache, offline=offline, progress=reporter)
+            return await enrich_sbom(
+                sbom_path, cache=cache, offline=offline, progress=reporter, credentials=credentials
+            )
         assert grype_source is not None  # guaranteed by resolve_inputs
-        return await enrich_grype(grype_source, cache=cache, offline=offline, progress=reporter)
+        return await enrich_grype(
+            grype_source, cache=cache, offline=offline, progress=reporter, credentials=credentials
+        )
 
 
 async def enrich_findings(
@@ -127,6 +136,7 @@ async def enrich_findings(
     offline: bool = False,
     extra_degradations: Iterable[str] = (),
     progress: ProgressReporter | None = None,
+    credentials: Mapping[str, str] | None = None,
 ) -> tuple[list[EnrichedFinding], RunMetadata]:
     """Enrich every finding from all registered adapters; never raises for a source.
 
@@ -138,13 +148,17 @@ async def enrich_findings(
     """
     own_client = client is None
     if client is None:
-        client = _default_client()
+        client = default_client()
     try:
         findings, resolution_notes = await _resolve_aliases(
             findings, cache=cache, client=client, offline=offline, progress=progress
         )
         cve_ids = list(dict.fromkeys(finding.cve_id for finding in findings))
-        adapters = [cls(client, cache, offline=offline) for cls in all_adapters()]
+        keys = credentials or {}
+        adapters = [
+            cls(client, cache, offline=offline, credential=keys.get(cls.name))
+            for cls in all_adapters()
+        ]
         if progress is not None:
             for adapter in adapters:
                 adapter.progress = progress.add_phase(adapter.name, len(cve_ids))
@@ -267,6 +281,7 @@ async def enrich_sbom(
     client: httpx.AsyncClient | None = None,
     offline: bool = False,
     progress: ProgressReporter | None = None,
+    credentials: Mapping[str, str] | None = None,
 ) -> tuple[list[EnrichedFinding], RunMetadata]:
     """SBOM → packages → findings (OSV discovery) → enrichment, one client throughout.
 
@@ -277,7 +292,7 @@ async def enrich_sbom(
     packages, warnings = parse_sbom(sbom_path)
     own_client = client is None
     if client is None:
-        client = _default_client()
+        client = default_client()
     try:
         adapter = OsvAdapter(client, cache, offline=offline)
         if progress is not None:
@@ -291,6 +306,7 @@ async def enrich_sbom(
             offline=offline,
             extra_degradations=[*warnings, *discovery_warnings],
             progress=progress,
+            credentials=credentials,
         )
     finally:
         if own_client:
@@ -304,6 +320,7 @@ async def enrich_grype(
     client: httpx.AsyncClient | None = None,
     offline: bool = False,
     progress: ProgressReporter | None = None,
+    credentials: Mapping[str, str] | None = None,
 ) -> tuple[list[EnrichedFinding], RunMetadata]:
     """Grype JSON (file path, or ``-`` for stdin) → findings → enrichment.
 
@@ -318,6 +335,7 @@ async def enrich_grype(
         offline=offline,
         extra_degradations=warnings,
         progress=progress,
+        credentials=credentials,
     )
 
 

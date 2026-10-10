@@ -136,9 +136,16 @@ class GhsaAdapter(SourceAdapter):
     ttl = timedelta(hours=24)
     supports_offline = False
 
-    def __init__(self, client: httpx.AsyncClient, cache: Cache, *, offline: bool = False) -> None:
-        super().__init__(client, cache, offline=offline)
-        token = os.environ.get(TOKEN_ENV)
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        cache: Cache,
+        *,
+        offline: bool = False,
+        credential: str | None = None,
+    ) -> None:
+        super().__init__(client, cache, offline=offline, credential=credential)
+        token = credential or os.environ.get(TOKEN_ENV)
         self._headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",

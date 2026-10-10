@@ -529,3 +529,34 @@ async def test_no_resolve_phase_for_pure_cve_input(
             [_finding("CVE-2021-44228")], cache=cache, client=client, progress=reporter
         )
     assert "resolve ids" not in reporter.phases
+
+
+async def test_credentials_reach_only_their_adapter(
+    cache: Cache,
+    load_fixture: LoadFixture,
+    fixture_client: MakeClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("VULNCTL_NVD_API_KEY", raising=False)
+    monkeypatch.delenv("VULNCTL_GITHUB_TOKEN", raising=False)
+    route = _live_router(load_fixture)
+    headers: dict[str, set[str | None]] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        host = request.url.host
+        headers.setdefault(host, set()).add(
+            request.headers.get("apiKey") or request.headers.get("Authorization")
+        )
+        return route(request)
+
+    async with fixture_client(handler) as client:
+        await enrich_findings(
+            [_finding("CVE-2021-44228")],
+            cache=cache,
+            client=client,
+            credentials={"nvd": "nvd-key-not-real"},
+        )
+
+    assert headers["services.nvd.nist.gov"] == {"nvd-key-not-real"}
+    assert headers["api.github.com"] == {None}  # the NVD key never leaks to GitHub
+    assert headers["api.first.org"] == {None}

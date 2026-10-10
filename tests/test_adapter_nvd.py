@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from conftest import LoadFixture, MakeClient
-from vulnctl.adapters.nvd import API_KEY_ENV, NvdAdapter
+from vulnctl.adapters.nvd import API_KEY_ENV, KeyCheck, NvdAdapter, check_api_key
 from vulnctl.cache import Cache
 from vulnctl.models import CvssData, NvdData, Unavailable, UnavailableReason
 
@@ -308,3 +308,88 @@ async def test_progress_advances_sum_to_requested_ids(
         adapter.progress = calls.append
         await adapter.fetch(["CVE-2021-44228", "GHSA-mh6f-8j2x-4483"])
     assert sum(calls) == 2  # one fetched, one guard-answered
+
+
+# --- credential hand-off and the invalid-key answer ---------------------------
+
+_INVALID_KEY = httpx.Response(404, headers={"message": "Invalid apiKey."})
+
+
+async def test_credential_is_sent_and_wins_over_the_env_var(
+    cache: Cache,
+    load_fixture: LoadFixture,
+    fixture_client: MakeClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(API_KEY_ENV, "env-key-not-real")
+    seen_headers: list[str | None] = []
+    body = load_fixture("nvd", "cve-2021-44228.json")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_headers.append(request.headers.get("apiKey"))
+        return httpx.Response(200, text=body)
+
+    async with fixture_client(handler) as client:
+        adapter = NvdAdapter(client, cache, credential="saved-key-not-real")
+        assert adapter.rate_limit.requests == 40
+        await adapter.fetch(["CVE-2021-44228"])
+
+    assert seen_headers == ["saved-key-not-real"]
+
+
+async def test_rejected_key_is_named_not_reported_as_a_bare_404(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    async with fixture_client(lambda request: _INVALID_KEY) as client:
+        results = await NvdAdapter(client, cache, credential="bad").fetch(["CVE-2021-44228"])
+
+    data = results["CVE-2021-44228"].data
+    assert isinstance(data, Unavailable)
+    assert data.reason is UnavailableReason.SOURCE_DOWN
+    assert data.detail == "NVD rejected the API key (Invalid apiKey)"
+
+
+async def test_plain_404_is_still_reported_by_status(
+    cache: Cache, fixture_client: MakeClient
+) -> None:
+    async with fixture_client(lambda request: httpx.Response(404)) as client:
+        results = await NvdAdapter(client, cache).fetch(["CVE-2021-44228"])
+
+    data = results["CVE-2021-44228"].data
+    assert isinstance(data, Unavailable) and data.detail == "HTTP 404"
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (httpx.Response(200, text="{}"), KeyCheck.VALID),
+        (_INVALID_KEY, KeyCheck.INVALID),
+        (httpx.Response(503), KeyCheck.UNVERIFIED),
+    ],
+    ids=["valid", "invalid", "nvd-down"],
+)
+async def test_check_api_key(
+    fixture_client: MakeClient, response: httpx.Response, expected: KeyCheck
+) -> None:
+    seen: list[tuple[str | None, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.headers.get("apiKey"), request.url.params.get("cveId")))
+        return response
+
+    async with fixture_client(handler) as client:
+        outcome, detail = await check_api_key(client, "candidate-key")
+
+    assert outcome is expected and detail
+    assert seen == [("candidate-key", "CVE-2021-44228")]  # exactly one probe
+
+
+async def test_check_api_key_network_error_is_unverified(fixture_client: MakeClient) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to host")
+
+    async with fixture_client(handler) as client:
+        outcome, detail = await check_api_key(client, "candidate-key")
+
+    assert outcome is KeyCheck.UNVERIFIED
+    assert "could not reach NVD" in detail

@@ -69,6 +69,11 @@ class SourceAdapter(ABC):
     concurrency, per-source rate limit) → validate strictly → write cache.
     The ``httpx.AsyncClient`` is injected, never created per call.
 
+    ``credential`` is this source's optional API key, resolved by the CLI
+    (env var or OS keychain) and handed in by the pipeline; adapters that
+    take one fall back to their own env var when it is None, so library
+    callers keep working without it.
+
     ``progress`` is display plumbing the pipeline may assign after
     construction: adapters call ``self.progress(n)`` as work for ``n``
     requested IDs completes, and total advances per ``fetch`` call must sum
@@ -80,10 +85,18 @@ class SourceAdapter(ABC):
     ttl: ClassVar[timedelta]
     supports_offline: ClassVar[bool]
 
-    def __init__(self, client: httpx.AsyncClient, cache: Cache, *, offline: bool = False) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        cache: Cache,
+        *,
+        offline: bool = False,
+        credential: str | None = None,
+    ) -> None:
         self._client = client
         self._cache = cache
         self._offline = offline
+        self._credential = credential
         self.progress: Callable[[int], None] = _no_progress
 
     @abstractmethod

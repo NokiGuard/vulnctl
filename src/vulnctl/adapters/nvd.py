@@ -5,10 +5,14 @@ returns at most one result, which always fits the first page (the parser
 still scans the ``vulnerabilities`` list rather than assuming index 0).
 Broad queries that do paginate are out of scope for v0.1. TTL 7d.
 
-The API key comes from ``VULNCTL_NVD_API_KEY`` only — never from config
-files or CLI flags (CLAUDE.md rule 6). Rate limits stay
+The optional API key arrives as the adapter's ``credential`` (the CLI
+resolves it from ``VULNCTL_NVD_API_KEY`` or the OS keychain — CLAUDE.md
+rule 6), falling back to the env var for library callers. Rate limits stay
 well under NVD's published ceilings (5 req/30s unkeyed, 50 req/30s keyed);
-403/429/503 responses are retried with exponential backoff.
+403/429/503 responses are retried with exponential backoff. NVD answers a
+bad key with HTTP 404 plus a ``message: Invalid apiKey.`` header — reported
+as exactly that rather than a bare 404, and probed by :func:`check_api_key`
+before ``vulnctl auth nvd`` saves a key.
 
 CVSS selection: prefer v3.1, then v3.0, then v2; within a version prefer the
 NVD-provided ``Primary`` entry. A v2-only CVE therefore yields a ``CvssData``
@@ -25,6 +29,7 @@ import asyncio
 import os
 import re
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -102,6 +107,41 @@ def _extract_cwes(weaknesses: Any) -> list[str]:
     return sorted(found, key=lambda cwe: int(cwe.split("-")[1]))
 
 
+_PROBE_CVE = "CVE-2021-44228"  # long-published and stable: a 200 means the key works
+_INVALID_KEY_DETAIL = "NVD rejected the API key (Invalid apiKey)"
+
+
+def _rejects_key(response: httpx.Response) -> bool:
+    """NVD's bad-key answer: HTTP 404 with a ``message: Invalid apiKey.`` header."""
+    return (
+        response.status_code == 404
+        and "invalid apikey" in response.headers.get("message", "").lower()
+    )
+
+
+class KeyCheck(StrEnum):
+    """Outcome of probing NVD with a candidate API key."""
+
+    VALID = "valid"
+    INVALID = "invalid"
+    UNVERIFIED = "unverified"  # NVD unreachable or answered something unexpected
+
+
+async def check_api_key(client: httpx.AsyncClient, api_key: str) -> tuple[KeyCheck, str]:
+    """Probe NVD once with ``api_key``; returns the outcome and a one-line detail."""
+    try:
+        response = await client.get(
+            API_URL, params={"cveId": _PROBE_CVE}, headers={"apiKey": api_key}
+        )
+    except httpx.HTTPError as exc:
+        return KeyCheck.UNVERIFIED, f"could not reach NVD ({exc})"
+    if _rejects_key(response):
+        return KeyCheck.INVALID, _INVALID_KEY_DETAIL
+    if response.status_code == 200:
+        return KeyCheck.VALID, "accepted by NVD"
+    return KeyCheck.UNVERIFIED, f"NVD answered HTTP {response.status_code}"
+
+
 @register
 class NvdAdapter(SourceAdapter):
     """Cache-through NVD lookups with polite rate limiting and backoff."""
@@ -114,9 +154,16 @@ class NvdAdapter(SourceAdapter):
     _RETRY_STATUSES = frozenset({403, 429, 503})
     _backoff_base = 1.0  # seconds; doubled per attempt, shrunk in tests
 
-    def __init__(self, client: httpx.AsyncClient, cache: Cache, *, offline: bool = False) -> None:
-        super().__init__(client, cache, offline=offline)
-        api_key = os.environ.get(API_KEY_ENV)
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        cache: Cache,
+        *,
+        offline: bool = False,
+        credential: str | None = None,
+    ) -> None:
+        super().__init__(client, cache, offline=offline, credential=credential)
+        api_key = credential or os.environ.get(API_KEY_ENV)
         self._headers = {"apiKey": api_key} if api_key else {}
         self.rate_limit = (
             RateLimit(requests=40, window_seconds=32.0)
@@ -185,6 +232,8 @@ class NvdAdapter(SourceAdapter):
             last_status = response.status_code
             if last_status in self._RETRY_STATUSES:
                 continue
+            if _rejects_key(response):
+                return self._unavailable(UnavailableReason.SOURCE_DOWN, _INVALID_KEY_DETAIL)
             if last_status != 200:
                 return self._unavailable(UnavailableReason.SOURCE_DOWN, f"HTTP {last_status}")
             if body_too_large(response):
