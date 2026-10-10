@@ -1,0 +1,385 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "serialNumber": "urn:uuid:529ac272-28f0-416a-96df-86608986d841",
+  "metadata": {
+    "timestamp": "2026-10-10T01:48:14Z",
+    "component": {
+      "type": "application",
+      "name": "legacy-service",
+      "version": "0.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/yargs-parser@5.0.0",
+      "name": "yargs-parser",
+      "version": "5.0.0",
+      "purl": "pkg:npm/yargs-parser@5.0.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/json5@1.0.1",
+      "name": "json5",
+      "version": "1.0.1",
+      "purl": "pkg:npm/json5@1.0.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/semver@5.7.1",
+      "name": "semver",
+      "version": "5.7.1",
+      "purl": "pkg:npm/semver@5.7.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/glob-parent@5.1.1",
+      "name": "glob-parent",
+      "version": "5.1.1",
+      "purl": "pkg:npm/glob-parent@5.1.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/path-parse@1.0.6",
+      "name": "path-parse",
+      "version": "1.0.6",
+      "purl": "pkg:npm/path-parse@1.0.6"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/hosted-git-info@2.8.8",
+      "name": "hosted-git-info",
+      "version": "2.8.8",
+      "purl": "pkg:npm/hosted-git-info@2.8.8"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/trim-newlines@3.0.0",
+      "name": "trim-newlines",
+      "version": "3.0.0",
+      "purl": "pkg:npm/trim-newlines@3.0.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/ansi-regex@4.1.0",
+      "name": "ansi-regex",
+      "version": "4.1.0",
+      "purl": "pkg:npm/ansi-regex@4.1.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/nth-check@1.0.2",
+      "name": "nth-check",
+      "version": "1.0.2",
+      "purl": "pkg:npm/nth-check@1.0.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/xml2js@0.4.19",
+      "name": "xml2js",
+      "version": "0.4.19",
+      "purl": "pkg:npm/xml2js@0.4.19"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/vue@2.5.0",
+      "name": "vue",
+      "version": "2.5.0",
+      "purl": "pkg:npm/vue@2.5.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/cookie@0.3.1",
+      "name": "cookie",
+      "version": "0.3.1",
+      "purl": "pkg:npm/cookie@0.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/send@0.16.0",
+      "name": "send",
+      "version": "0.16.0",
+      "purl": "pkg:npm/send@0.16.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pyyaml@5.1",
+      "name": "pyyaml",
+      "version": "5.1",
+      "purl": "pkg:pypi/pyyaml@5.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/sqlalchemy@1.2.0",
+      "name": "sqlalchemy",
+      "version": "1.2.0",
+      "purl": "pkg:pypi/sqlalchemy@1.2.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/idna@2.7",
+      "name": "idna",
+      "version": "2.7",
+      "purl": "pkg:pypi/idna@2.7"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/babel@2.8.0",
+      "name": "babel",
+      "version": "2.8.0",
+      "purl": "pkg:pypi/babel@2.8.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/gunicorn@19.9.0",
+      "name": "gunicorn",
+      "version": "19.9.0",
+      "purl": "pkg:pypi/gunicorn@19.9.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/celery@4.4.0",
+      "name": "celery",
+      "version": "4.4.0",
+      "purl": "pkg:pypi/celery@4.4.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pycrypto@2.6.1",
+      "name": "pycrypto",
+      "version": "2.6.1",
+      "purl": "pkg:pypi/pycrypto@2.6.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/rsa@4.0",
+      "name": "rsa",
+      "version": "4.0",
+      "purl": "pkg:pypi/rsa@4.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/oauthlib@3.1.0",
+      "name": "oauthlib",
+      "version": "3.1.0",
+      "purl": "pkg:pypi/oauthlib@3.1.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/fastapi@0.60.0",
+      "name": "fastapi",
+      "version": "0.60.0",
+      "purl": "pkg:pypi/fastapi@0.60.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/markdown@2.6.0",
+      "name": "markdown",
+      "version": "2.6.0",
+      "purl": "pkg:pypi/markdown@2.6.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/joblib@0.14.0",
+      "name": "joblib",
+      "version": "0.14.0",
+      "purl": "pkg:pypi/joblib@0.14.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/py@1.8.0",
+      "name": "py",
+      "version": "1.8.0",
+      "purl": "pkg:pypi/py@1.8.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.springframework/spring-core@5.2.0.RELEASE",
+      "name": "spring-core",
+      "version": "5.2.0.RELEASE",
+      "purl": "pkg:maven/org.springframework/spring-core@5.2.0.RELEASE"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/commons-collections/commons-collections@3.2.1",
+      "name": "commons-collections",
+      "version": "3.2.1",
+      "purl": "pkg:maven/commons-collections/commons-collections@3.2.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/com.google.guava/guava@23.0",
+      "name": "guava",
+      "version": "23.0",
+      "purl": "pkg:maven/com.google.guava/guava@23.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/com.alibaba/fastjson@1.2.24",
+      "name": "fastjson",
+      "version": "1.2.24",
+      "purl": "pkg:maven/com.alibaba/fastjson@1.2.24"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/com.h2database/h2@1.4.199",
+      "name": "h2",
+      "version": "1.4.199",
+      "purl": "pkg:maven/com.h2database/h2@1.4.199"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.commons/commons-text@1.9",
+      "name": "commons-text",
+      "version": "1.9",
+      "purl": "pkg:maven/org.apache.commons/commons-text@1.9"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/ch.qos.logback/logback-classic@1.2.3",
+      "name": "logback-classic",
+      "version": "1.2.3",
+      "purl": "pkg:maven/ch.qos.logback/logback-classic@1.2.3"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/commons-fileupload/commons-fileupload@1.3.1",
+      "name": "commons-fileupload",
+      "version": "1.3.1",
+      "purl": "pkg:maven/commons-fileupload/commons-fileupload@1.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.httpcomponents/httpclient@4.5.2",
+      "name": "httpclient",
+      "version": "4.5.2",
+      "purl": "pkg:maven/org.apache.httpcomponents/httpclient@4.5.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.jsoup/jsoup@1.11.2",
+      "name": "jsoup",
+      "version": "1.11.2",
+      "purl": "pkg:maven/org.jsoup/jsoup@1.11.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/com.google.protobuf/protobuf-java@3.11.0",
+      "name": "protobuf-java",
+      "version": "3.11.0",
+      "purl": "pkg:maven/com.google.protobuf/protobuf-java@3.11.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/mysql/mysql-connector-java@8.0.15",
+      "name": "mysql-connector-java",
+      "version": "8.0.15",
+      "purl": "pkg:maven/mysql/mysql-connector-java@8.0.15"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:maven/org.apache.zookeeper/zookeeper@3.4.14",
+      "name": "zookeeper",
+      "version": "3.4.14",
+      "purl": "pkg:maven/org.apache.zookeeper/zookeeper@3.4.14"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/gin-gonic/gin@v1.6.0",
+      "name": "gin",
+      "version": "v1.6.0",
+      "purl": "pkg:golang/github.com/gin-gonic/gin@v1.6.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/golang.org/x/net@v0.0.0-20200202094626-16171245cfb2",
+      "name": "net",
+      "version": "v0.0.0-20200202094626-16171245cfb2",
+      "purl": "pkg:golang/golang.org/x/net@v0.0.0-20200202094626-16171245cfb2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/golang.org/x/crypto@v0.0.0-20200220183623-bac4c82f6975",
+      "name": "crypto",
+      "version": "v0.0.0-20200220183623-bac4c82f6975",
+      "purl": "pkg:golang/golang.org/x/crypto@v0.0.0-20200220183623-bac4c82f6975"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/dgrijalva/jwt-go@v3.2.0+incompatible",
+      "name": "jwt-go",
+      "version": "v3.2.0+incompatible",
+      "purl": "pkg:golang/github.com/dgrijalva/jwt-go@v3.2.0+incompatible"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/gopkg.in/yaml.v2@v2.2.2",
+      "name": "yaml.v2",
+      "version": "v2.2.2",
+      "purl": "pkg:golang/gopkg.in/yaml.v2@v2.2.2"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/docker/docker@v19.03.0+incompatible",
+      "name": "docker",
+      "version": "v19.03.0+incompatible",
+      "purl": "pkg:golang/github.com/docker/docker@v19.03.0+incompatible"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/k8s.io/kubernetes@v1.18.0",
+      "name": "kubernetes",
+      "version": "v1.18.0",
+      "purl": "pkg:golang/k8s.io/kubernetes@v1.18.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/prometheus/client_golang@v1.11.0",
+      "name": "client_golang",
+      "version": "v1.11.0",
+      "purl": "pkg:golang/github.com/prometheus/client_golang@v1.11.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/google.golang.org/grpc@v1.30.0",
+      "name": "grpc",
+      "version": "v1.30.0",
+      "purl": "pkg:golang/google.golang.org/grpc@v1.30.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/containerd/containerd@v1.4.0",
+      "name": "containerd",
+      "version": "v1.4.0",
+      "purl": "pkg:golang/github.com/containerd/containerd@v1.4.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/opencontainers/runc@v1.0.0-rc9",
+      "name": "runc",
+      "version": "v1.0.0-rc9",
+      "purl": "pkg:golang/github.com/opencontainers/runc@v1.0.0-rc9"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/helm.sh/helm/v3@v3.2.0",
+      "name": "v3",
+      "version": "v3.2.0",
+      "purl": "pkg:golang/helm.sh/helm/v3@v3.2.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/left-pad@1.3.0",
+      "name": "left-pad",
+      "version": "1.3.0",
+      "purl": "pkg:npm/left-pad@1.3.0"
+    },
+    {
+      "type": "file",
+      "bom-ref": "vendored-blob",
+      "name": "vendor/legacy.min.js"
+    }
+  ]
+}
