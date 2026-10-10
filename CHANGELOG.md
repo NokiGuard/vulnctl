@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Save your NVD API key once.** `vulnctl auth nvd` prompts for the key with
+  hidden input, verifies it with one NVD request, and stores it in the OS
+  keychain (macOS Keychain, Linux Secret Service, Windows Credential Locker).
+  `vulnctl auth status` shows where the active key comes from (masked), and
+  `vulnctl auth remove nvd` deletes it. A key makes NVD lookups — the
+  slowest part of enriching a large input — about 10x faster.
+- **First-run key prompt**: the first interactive online `enrich` or `explain`
+  with no key configured offers to save one. Skipping is remembered and the
+  prompt never repeats; it never appears in scripts, pipes, CI, `--offline`
+  runs, or with `--grype -`.
+- **Sample SBOMs** `examples/medium-app.cdx.json` (~230 CVEs) and
+  `examples/large-app.cdx.json` (~1,700 CVEs): real npm, PyPI, Maven, and Go
+  packages pinned to old, vulnerable versions, for trying vulnctl on
+  realistic volume and timing enrichment.
+- **CLI reference additions**: a command index and an environment-variables
+  table in `docs/cli.md`; a commands table in the README.
+
+### Changed
+
+- **NVD key resolution**: `VULNCTL_NVD_API_KEY` still works and takes
+  precedence; the OS keychain is consulted when it is unset. Adds the
+  `keyring` dependency.
+- **A rejected NVD key is named as such**: NVD answers an invalid key with
+  HTTP 404; findings now report `NVD rejected the API key (Invalid apiKey)`
+  instead of a bare `HTTP 404`.
+
 ## [0.2.2] - 2026-08-01
 
 ### Fixed

@@ -40,8 +40,10 @@ src/vulnctl/
 ├── cli.py               # Typer app wiring + cache commands; thin — no business logic here
 ├── cli_help.py          # root --help extras: generated flag summary + examples panels
 ├── commands.py          # enrich/explain command signatures; dispatch only
+├── auth.py              # `vulnctl auth` commands + first-run NVD key prompt
+├── credentials.py       # NVD key resolution (env var > OS keychain), save/remove
 ├── models.py            # Pydantic: Finding, Enrichment, Verdict, DecisionPath
-├── ingest/              # cve_list.py, cyclonedx.py, spdx.py, grype.py, trivy.py
+├── ingest/              # cve_list.py, cyclonedx.py, grype.py (spdx/trivy: FR-4, not yet built)
 ├── adapters/            # one module per intel source; all implement SourceAdapter ABC
 │   ├── base.py          # SourceAdapter ABC + registry
 │   ├── epss.py, kev.py, nvd.py, osv.py, ghsa.py, exploits.py
@@ -62,7 +64,7 @@ tests/
 3. **Fail open on enrichment, fail loud on input.** A source being down degrades the enrichment (mark the field `unavailable`, note it in the decision path) — it never crashes a run. Malformed SBOMs/scanner files are hard errors with actionable messages.
 4. **Every verdict is explainable.** `DecisionPath` records each tree node visited, the input value used, and which source supplied it. If you add a scoring signal, you must thread it through `DecisionPath`.
 5. **Offline mode is first-class.** `--offline` must work using only cached/bundled data (EPSS CSV snapshot, KEV JSON snapshot). Adapters declare whether they support offline.
-6. **No secrets in code or fixtures.** NVD API key comes from `VULNCTL_NVD_API_KEY` env var only. Scrub any recorded fixtures of keys before committing.
+6. **No secrets in code or fixtures.** The NVD API key comes from the `VULNCTL_NVD_API_KEY` env var, else the OS keychain (`keyring`, service `vulnctl`) — never a config file, the cache, or a CLI flag. Only the CLI layer (`credentials.py`/`auth.py`) touches the keychain; the pipeline hands adapters the resolved key as their `credential`. Tests run against an in-memory keychain (`tests/conftest.py`). Scrub any recorded fixtures of keys before committing.
 
 ## Security posture (this is a security tool — hold the bar)
 

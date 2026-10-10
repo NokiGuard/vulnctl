@@ -79,6 +79,7 @@ class SourceAdapter(ABC):
 - Registered in a simple registry (same pluggable pattern as composeguard's rule engine)
 - Each adapter: check cache → batch-fetch misses (bounded concurrency, per-source rate limits) → validate against strict Pydantic schema → write cache → return
 - Isolation rule: adapters import only `base`, `cache`, `models`. Adding a source touches exactly one new module + fixtures + registry line
+- `credential` constructor argument: the source's optional API key, resolved by the CLI layer (env var, then OS keychain — `credentials.py`) and passed per adapter name by the pipeline. Adapters never read the keychain themselves
 - `progress` attribute (display plumbing, assigned by the pipeline, no-op by default): adapters call `self.progress(n)` as work for `n` IDs completes; total advances per `fetch` must sum to `len(cve_ids)`. Never awaited, never load-bearing
 
 ### 3.3 Enrichment pipeline

@@ -62,7 +62,7 @@ A CLI-first vulnerability prioritization engine that turns raw findings into **a
 ## 5. Non-functional requirements
 
 - **NFR-1:** Enrich 500 CVEs in < 60s warm-cache, < 5min cold (API rate limits permitting)
-- **NFR-2:** Zero required credentials; NVD API key optional (higher rate limits) via env var
+- **NFR-2:** Zero required credentials; NVD API key optional (higher rate limits) via env var or the OS keychain (`vulnctl auth nvd`, offered once on the first interactive online run)
 - **NFR-3:** Runs on Linux and macOS; Python 3.11+; installable via `pipx install vulnctl`
 - **NFR-4:** Test coverage ≥ 85% on `ssvc/` and `adapters/`; SSVC engine at 100% branch coverage
 - **NFR-5:** All third-party API schemas validated defensively; malformed upstream data degrades, never crashes

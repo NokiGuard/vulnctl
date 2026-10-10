@@ -37,12 +37,25 @@ pipx install vulnctl
 vulnctl --version
 ```
 
-Requires Python 3.11+ on Linux or macOS. No credentials are required; an NVD
-API key (optional, for higher rate limits) is read from the
-`VULNCTL_NVD_API_KEY` environment variable only.
+Requires Python 3.11+ on Linux or macOS. No credentials are required, but a
+free NVD API key makes enrichment about 10x faster on large inputs: the first
+online run offers to save one to your OS keychain, or run `vulnctl auth nvd`
+any time. The `VULNCTL_NVD_API_KEY` environment variable overrides the saved
+key (use it in CI). See [docs/cli.md](docs/cli.md#vulnctl-auth).
 
 Enable tab completion for commands, flags, and values with
 `vulnctl --install-completion` (see [docs/cli.md](docs/cli.md)).
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `vulnctl enrich` | Enrich CVE/GHSA IDs, an SBOM (`--sbom`), or a Grype scan (`--grype`) and rank with SSVC verdicts |
+| `vulnctl explain <ID>` | One finding in depth: every source's answer, the decision path, and what would flip it |
+| `vulnctl auth nvd` · `status` · `remove nvd` | Save, inspect, or delete your NVD API key (OS keychain) |
+| `vulnctl cache stats` · `purge` | Inspect or clear the local response cache |
+
+Every flag and example: `vulnctl --help`, or [docs/cli.md](docs/cli.md).
 
 ## Quickstart (60 seconds)
 
@@ -96,6 +109,10 @@ vulnctl enrich --sbom app.cdx.json --context context.yaml
 # Grype JSON straight off a scan (‘-’ reads stdin)
 grype my-image:latest -o json | vulnctl enrich --grype - --context context.yaml
 ```
+
+No SBOM handy? [`examples/medium-app.cdx.json`](examples/medium-app.cdx.json)
+(~230 CVEs) and [`examples/large-app.cdx.json`](examples/large-app.cdx.json)
+(~1,700 CVEs) are real packages pinned to old, vulnerable versions.
 
 **4. Gate CI on risk, not raw CVSS.** Emit SARIF for code scanning, then fail
 the build only when something crosses your threshold:
