@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
+Makes large runs practical: save a free NVD API key once and NVD lookups,
+the bulk of a big SBOM's runtime, get about 10x faster. Also patches a
+critical TLS advisory in a transitive dependency and trims unused files.
+The JSON output shape and its `schema_version` (`"1"`) are unchanged.
+
 ### Added
 
 - **Save your NVD API key once.** `vulnctl auth nvd` prompts for the key with
@@ -31,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **NVD key resolution**: `VULNCTL_NVD_API_KEY` still works and takes
   precedence; the OS keychain is consulted when it is unset. Adds the
   `keyring` dependency.
+- **Security: `anyio` 4.15.1** in the lockfile (transitive, via httpx) for
+  GHSA-82r6-8w77-94w6 (Critical: TLS host name encoding enabling potential
+  certificate spoofing) and two subprocess advisories vulnctl never
+  triggers. Fresh installs already resolved a fixed version.
 - **Pre-release cleanup**: removed unused project files (the unfinished
   case-study and announcement drafts with their stats script, the unrecorded
   demo tape, the completed v0.1 `ROADMAP.md`, and the superseded TestPyPI
@@ -176,7 +187,8 @@ that produced it.
   sign with keyless cosign (OIDC), and publish to PyPI via trusted publishing
   (no stored token).
 
-[Unreleased]: https://github.com/NokiGuard/vulnctl/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/NokiGuard/vulnctl/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/NokiGuard/vulnctl/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/NokiGuard/vulnctl/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/NokiGuard/vulnctl/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/NokiGuard/vulnctl/compare/v0.1.0...v0.2.0
