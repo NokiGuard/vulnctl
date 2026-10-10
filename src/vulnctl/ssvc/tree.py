@@ -86,9 +86,8 @@ def _resolve_exploitation(enrichment: Enrichment) -> Resolution | None:
       ``kev+exploits``).
     - Otherwise (either source Unavailable with no positive signal) → None:
       ``none`` cannot be asserted from partial data, so the tree default
-      applies and the verdict is flagged degraded. Until the M5 exploit
-      adapter lands, exploits is always Unavailable, so unlisted CVEs flow
-      through the default by design.
+      applies and the verdict is flagged degraded (e.g. a GHSA ID with no
+      CVE alias, which the CVE-keyed KEV and exploit index cannot answer).
     """
     kev = enrichment.kev
     exploits = enrichment.exploits

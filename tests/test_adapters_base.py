@@ -16,7 +16,6 @@ from vulnctl.adapters.base import (
     SourceResult,
     all_adapters,
     bounded_gather,
-    get_adapter,
     register,
 )
 
@@ -39,9 +38,8 @@ def _dummy_adapter(adapter_name: str) -> type[SourceAdapter]:
     return Dummy
 
 
-def test_register_and_lookup() -> None:
+def test_register_and_list() -> None:
     cls = register(_dummy_adapter("dummy"))
-    assert get_adapter("dummy") is cls
     assert all_adapters() == [cls]
 
 
@@ -49,11 +47,6 @@ def test_register_duplicate_name_rejected() -> None:
     register(_dummy_adapter("dummy"))
     with pytest.raises(ValueError, match="duplicate adapter name 'dummy'"):
         register(_dummy_adapter("dummy"))
-
-
-def test_get_unknown_adapter_raises() -> None:
-    with pytest.raises(KeyError, match="no adapter registered under 'nope'"):
-        get_adapter("nope")
 
 
 def test_registration_order_preserved() -> None:

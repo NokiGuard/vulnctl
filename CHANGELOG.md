@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **NVD key resolution**: `VULNCTL_NVD_API_KEY` still works and takes
   precedence; the OS keychain is consulted when it is unset. Adds the
   `keyring` dependency.
+- **Pre-release cleanup**: removed unused project files (the unfinished
+  case-study and announcement drafts with their stats script, the unrecorded
+  demo tape, the completed v0.1 `ROADMAP.md`, and the superseded TestPyPI
+  workflow), the uninstalled `pre-commit` dev tooling, and the unused
+  `vulnctl.adapters.base.get_adapter()` helper. Local sdist builds now
+  exclude the maintainer's local-only notes.
 - **A rejected NVD key is named as such**: NVD answers an invalid key with
   HTTP 404; findings now report `NVD rejected the API key (Invalid apiKey)`
   instead of a bare `HTTP 404`.

@@ -96,7 +96,6 @@ class SourceAdapter(ABC):
         self._client = client
         self._cache = cache
         self._offline = offline
-        self._credential = credential
         self.progress: Callable[[int], None] = _no_progress
 
     @abstractmethod
@@ -116,14 +115,6 @@ def register(cls: type[SourceAdapter]) -> type[SourceAdapter]:
         raise ValueError(f"duplicate adapter name {cls.name!r}")
     _REGISTRY[cls.name] = cls
     return cls
-
-
-def get_adapter(name: str) -> type[SourceAdapter]:
-    """Look up a registered adapter class by name."""
-    try:
-        return _REGISTRY[name]
-    except KeyError:
-        raise KeyError(f"no adapter registered under {name!r}") from None
 
 
 def all_adapters() -> list[type[SourceAdapter]]:

@@ -201,9 +201,10 @@ class Enrichment(BaseModel):
 
 
 class EnrichedFinding(BaseModel):
-    """A finding paired with its enrichment — what the output layer consumes.
+    """A finding paired with its enrichment, before the SSVC engine runs.
 
-    Extended to ``RankedResult`` (adding a ``Verdict``) in M3.
+    :func:`vulnctl.pipeline.apply_tree` turns each into a ``RankedResult``
+    (adding the ``Verdict``), which is what the output layer consumes.
     """
 
     model_config = _MODEL_CONFIG

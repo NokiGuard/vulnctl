@@ -11,9 +11,9 @@ capture: an adapter that *raises* (a bug — adapters are supposed to degrade
 internally) turns into ``Unavailable(source_down)`` for every CVE rather than
 failing the run (CLAUDE.md architecture rule 3).
 
-Sources with no adapter yet (exploits in M5) are filled with
-``Unavailable(not_found, "no adapter for this source yet")`` so the decision
-path can still show why the field is empty.
+An adapter whose answer is not the data type its field expects (a bug) is
+filled with ``Unavailable(source_down, "adapter returned an unexpected data
+type")`` rather than crashing assembly, so the field is visibly degraded.
 
 OSV/GHSA keep-both policy: both sources' answers are first-class —
 ``Enrichment.versions`` carries OSV's ranges and ``Enrichment.advisory``
@@ -65,8 +65,8 @@ from vulnctl.output.progress import EnrichmentProgress, ProgressReporter
 from vulnctl.ssvc.engine import evaluate
 from vulnctl.ssvc.tree import DecisionTree
 
-_NO_ADAPTER = Unavailable(
-    reason=UnavailableReason.NOT_FOUND, detail="no adapter for this source yet"
+_UNEXPECTED = Unavailable(
+    reason=UnavailableReason.SOURCE_DOWN, detail="adapter returned an unexpected data type"
 )
 
 
@@ -391,22 +391,22 @@ def _assemble(
         cvss: CvssData | Unavailable = nvd.data.cvss
         cwes = nvd.data.cwes
     else:
-        cvss = nvd.data if isinstance(nvd.data, Unavailable) else _NO_ADAPTER
+        cvss = nvd.data if isinstance(nvd.data, Unavailable) else _UNEXPECTED
         cwes = []
 
-    advisory = ghsa.data if isinstance(ghsa.data, GhsaData | Unavailable) else _NO_ADAPTER
-    osv_versions = osv.data if isinstance(osv.data, VersionData | Unavailable) else _NO_ADAPTER
+    advisory = ghsa.data if isinstance(ghsa.data, GhsaData | Unavailable) else _UNEXPECTED
+    osv_versions = osv.data if isinstance(osv.data, VersionData | Unavailable) else _UNEXPECTED
     versions, conflict = _merge_versions(cve_id, osv_versions, advisory)
 
     enrichment = Enrichment(
-        epss=epss.data if isinstance(epss.data, EpssData | Unavailable) else _NO_ADAPTER,
-        kev=kev.data if isinstance(kev.data, KevData | Unavailable) else _NO_ADAPTER,
+        epss=epss.data if isinstance(epss.data, EpssData | Unavailable) else _UNEXPECTED,
+        kev=kev.data if isinstance(kev.data, KevData | Unavailable) else _UNEXPECTED,
         cvss=cvss,
         cwes=cwes,
         versions=versions,
         advisory=advisory,
         exploits=(
-            exploits.data if isinstance(exploits.data, ExploitData | Unavailable) else _NO_ADAPTER
+            exploits.data if isinstance(exploits.data, ExploitData | Unavailable) else _UNEXPECTED
         ),
         provenance={
             "epss": epss.meta,

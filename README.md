@@ -159,7 +159,6 @@ uv run ruff check .           # lint
 uv run ruff format --check .  # format check
 uv run mypy src/              # type check
 uv run vulnctl --help         # smoke-test the CLI
-uv run pre-commit install     # wire the git hook
 ```
 
 All four checks (pytest, ruff check, ruff format, mypy) must pass before any
