@@ -15,6 +15,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from vulnctl.auth import run_credentials
 from vulnctl.cache import Cache
 from vulnctl.context import ContextError, load_context
 from vulnctl.ingest import IngestError
@@ -99,6 +100,7 @@ def enrich(
         findings = resolve_inputs(vuln_ids, sbom_path, grype_source)
         org_context = load_context(context_path)
         tree = load_tree(tree_path) if tree_path is not None else load_bundled_tree()
+        credentials = run_credentials(offline=offline, stdin_is_data=grype_source == "-")
         with Cache() as cache:
             results, metadata = asyncio.run(
                 run_enrichment(
@@ -107,6 +109,7 @@ def enrich(
                     grype_source=grype_source,
                     cache=cache,
                     offline=offline,
+                    credentials=credentials,
                 )
             )
         ranked = apply_tree(results, org_context, tree)
@@ -162,6 +165,7 @@ def explain(
         assert findings is not None  # one positional ID → always the ID path
         org_context = load_context(context_path)
         tree = load_tree(tree_path) if tree_path is not None else load_bundled_tree()
+        credentials = run_credentials(offline=offline, stdin_is_data=False)
         with Cache() as cache:
             results, metadata = asyncio.run(
                 run_enrichment(
@@ -170,6 +174,7 @@ def explain(
                     grype_source=None,
                     cache=cache,
                     offline=offline,
+                    credentials=credentials,
                 )
             )
         ranked = apply_tree(results, org_context, tree)

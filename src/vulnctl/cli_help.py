@@ -54,6 +54,10 @@ _EXAMPLES: tuple[tuple[str, str], ...] = (
         "Ask why one finding got its verdict, and what would change it",
         "vulnctl explain CVE-2021-44228",
     ),
+    (
+        "Save a free NVD API key to your OS keychain (~10x faster enrichment)",
+        "vulnctl auth nvd",
+    ),
 )
 
 

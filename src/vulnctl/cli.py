@@ -10,6 +10,7 @@ import typer
 from rich.table import Table
 
 from vulnctl import commands
+from vulnctl.auth import auth_app
 from vulnctl.cache import Cache
 from vulnctl.cli_help import HelpfulGroup
 from vulnctl.commands import console
@@ -22,6 +23,7 @@ app = typer.Typer(
 )
 cache_app = typer.Typer(help="Inspect and manage the local response cache.", no_args_is_help=True)
 app.add_typer(cache_app, name="cache")
+app.add_typer(auth_app, name="auth")
 
 app.command()(commands.enrich)
 app.command()(commands.explain)
